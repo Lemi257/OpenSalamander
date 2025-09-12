@@ -30,7 +30,7 @@ void CFilesWindow::Convert()
     CALL_STACK_MESSAGE1("CFilesWindow::Convert()");
     if (Dirs->Count + Files->Count == 0)
         return;
-    BeginStopRefresh(); // cmuchal si da pohov
+    BeginStopRefresh(); // snooper takes a break
 
     if (!FilesActionInProgress)
     {
@@ -49,19 +49,19 @@ void CFilesWindow::Convert()
             {
                 UpdateWindow(MainWindow->HWindow);
                 if (convertDlg.CodeType == 0 && convertDlg.EOFType == 0)
-                    break; // neni co delat
+                    break; // nothing to do
 
                 CCriteriaData filter;
                 filter.UseMasks = TRUE;
                 filter.Masks.SetMasksString(convertDlg.Mask);
                 int errpos = 0;
                 if (!filter.Masks.PrepareMasks(errpos))
-                    break; // chybna maska
+                    break; // invalid mask
 
-                if (CheckPath(TRUE) != ERROR_SUCCESS) // slozila se cesta, na ktere mame pracovat
+                if (CheckPath(TRUE) != ERROR_SUCCESS) // the path we need to work on failed
                 {
                     FilesActionInProgress = FALSE;
-                    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+                    EndStopRefresh(); // snooper will start again now
                     return;
                 }
 
@@ -69,17 +69,17 @@ void CFilesWindow::Convert()
 
                 dlgData.EOFType = convertDlg.EOFType;
 
-                // inicializace objektu CodeTables probehla jiz v dialogu Convert
+                // the CodeTables object was initialized in the Convert dialog
                 if (!CodeTables.GetCode(dlgData.CodeTable, convertDlg.CodeType))
                 {
-                    // pokud se nepodari ziskat kodovaci tabulku nebo neni zadne kodovani vybrano,
-                    // provedeme kodovani jedna ku jedne - tedy zadne
+                    // if we fail to obtain the encoding table or no encoding is selected,
+                    // perform one-to-one encoding, i.e. no conversion
                     int i;
                     for (i = 0; i < 256; i++)
                         dlgData.CodeTable[i] = i;
                 }
 
-                //---  zjisteni jake adresare a soubory jsou oznacene
+                //---  determine which directories and files are selected
                 int* indexes = NULL;
                 CFileData* f = NULL;
                 int count = GetSelCount();
@@ -90,25 +90,25 @@ void CFilesWindow::Convert()
                     {
                         TRACE_E(LOW_MEMORY);
                         FilesActionInProgress = FALSE;
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
+                        EndStopRefresh(); // snooper will start again now
                         return;
                     }
                     GetSelItems(count, indexes);
                 }
-                else // nic neni oznaceno
+                else // nothing is selected
                 {
                     int i = GetCaretIndex();
                     if (i < 0 || i >= Dirs->Count + Files->Count)
                     {
                         FilesActionInProgress = FALSE;
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
-                        return;           // spatny index (zadne soubory)
+                        EndStopRefresh(); // snooper will start again now
+                        return;           // invalid index (no files)
                     }
                     if (i == 0 && subDir)
                     {
                         FilesActionInProgress = FALSE;
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
-                        return;           // se ".." nepracujem
+                        EndStopRefresh(); // snooper will start again now
+                        return;           // we do not work with ".."
                     }
                     f = (i < Dirs->Count) ? &Dirs->At(i) : &Files->At(i - Dirs->Count);
                 }
@@ -128,13 +128,13 @@ void CFilesWindow::Convert()
                                                NULL, NULL, count, indexes, f, NULL, NULL, FALSE, &filter);
                     if (script->Count == 0)
                         res = FALSE;
-                    // prohozeno kvuli umozneni aktivace hlavniho okna (nesmi byt disable), jinak prepina do jine app
+                    // reordered to allow the main window to activate (must not be disabled), otherwise it switches to another app
                     EnableWindow(MainWindow->HWindow, TRUE);
                     DestroySafeWaitWindow();
 
-                    // pokud je aktivni Salamander, zavolame SetFocus na zapamatovane okno (SetFocus nefunguje
-                    // pokud je hl. okno disablovane - po deaktivaci/aktivaci disablovaneho hl. okna aktivni panel
-                    // nema fokus)
+                    // if Salamander is active, call SetFocus on the stored window (SetFocus fails
+                    // if the main window is disabled - after deactivation/activation of the disabled main window the active panel
+                    // does not have focus)
                     HWND hwnd = GetForegroundWindow();
                     while (hwnd != NULL && hwnd != MainWindow->HWindow)
                         hwnd = GetParent(hwnd);
@@ -143,8 +143,8 @@ void CFilesWindow::Convert()
 
                     SetCursor(oldCur);
 
-                    // pripravime refresh neautomaticky refreshovanych adresaru
-                    // zmena v adresari zobrazenem v panelu a pokud se pracovalo i v podadresarich, tak i v podadresarich
+                    // prepare refresh of manually refreshed directories
+                    // change in the directory displayed in the panel and also in subdirectories if work was done there as well
                     script->SetWorkPath1(GetPath(), convertDlg.SubDirs);
 
                     if (!res || !StartProgressDialog(script, LoadStr(IDS_CONVERTTITLE), NULL, &dlgData))
@@ -154,8 +154,8 @@ void CFilesWindow::Convert()
                             SalMessageBox(HWindow, LoadStr(IDS_NOFILE_MATCHEDMASK), LoadStr(IDS_INFOTITLE),
                                           MB_OK | MB_ICONINFORMATION);
 
-                            // zadny ze souboru nemusel projit pres mask filtr
-                            SetSel(FALSE, -1, TRUE);                        // explicitni prekresleni
+                            // none of the files had to pass through the mask filter
+                            SetSel(FALSE, -1, TRUE);                        // explicit repaint
                             PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
                         }
                         UpdateWindow(MainWindow->HWindow);
@@ -163,9 +163,9 @@ void CFilesWindow::Convert()
                             script->ResetState();
                         FreeScript(script);
                     }
-                    else // odstraneni sel. indexu (necekame az operace dobehne, bezi v jinem threadu)
+                    else // removal of selection index (no waiting for operation finish, operation runs in another thread)
                     {
-                        SetSel(FALSE, -1, TRUE);                        // explicitni prekresleni
+                        SetSel(FALSE, -1, TRUE);                        // explicit repaint
                         PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
                         UpdateWindow(MainWindow->HWindow);
                     }
@@ -179,7 +179,7 @@ void CFilesWindow::Convert()
         }
         FilesActionInProgress = FALSE;
     }
-    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+    EndStopRefresh(); // snooper will start again now
 }
 
 void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncryption, BOOL encrypted)
@@ -195,13 +195,13 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
             index = GetCaretIndex();
         else
             GetSelItems(1, &index);
-        // focus na UpDiru -- neni co convertit
+        // focus is on UpDir -- nothing to convert
         if (Dirs->Count > 0 && index == 0 && strcmp(Dirs->At(0).Name, "..") == 0)
             return;
     }
-    BeginStopRefresh(); // cmuchal si da pohov
+    BeginStopRefresh(); // snooper takes a break
 
-    // pokud neni vybrana zadna polozka, vybereme tu pod focusem a ulozime jeji jmeno
+    // if no item is selected, select the one under focus and store its name
     char temporarySelected[MAX_PATH];
     temporarySelected[0] = 0;
     if ((!setCompress || Configuration.CnfrmNTFSPress) &&
@@ -245,7 +245,7 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
 
                             BOOL timeObtained = FALSE;
 
-                            // zjistime casy souboru
+                            // retrieve the file times
                             char fileName[MAX_PATH];
                             strcpy(fileName, GetPath());
                             SalPathAppend(fileName, f->Name, MAX_PATH);
@@ -269,12 +269,12 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                             }
                             if (!timeObtained)
                             {
-                                // pokud se nam nepodarilo vytahnout cas ze souboru, predhodime alespon ten co mame
+                                // if we failed to obtain the time from the file, use at least the one we have
                                 FILETIME ft;
                                 if (!FileTimeToLocalFileTime(&f->LastWrite, &ft) ||
                                     !FileTimeToSystemTime(&ft, &timeModified))
                                 {
-                                    GetLocalTime(&timeModified); // cas ktery mame je invalidni, bereme aktualni cas
+                                    GetLocalTime(&timeModified); // the time we have is invalid, use the current time
                                 }
                                 timeCreated = timeModified;
                                 timeAccessed = timeModified;
@@ -334,11 +334,11 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                 if (setCompress)
                 {
                     chDlg.Compressed = compressed;
-                    chDlg.Encrypted = compressed ? 0 : 2; // komprese vylucuje sifrovani : bez komprese muze sifrovani zustat jak je
+                    chDlg.Encrypted = compressed ? 0 : 2; // compression excludes encryption; without compression encryption may remain as is
                 }
                 else
                 {
-                    chDlg.Compressed = encrypted ? 0 : 2; // sifrovani vylucuje kompresi : bez sifrovani muze komprese zustat jak je
+                    chDlg.Compressed = encrypted ? 0 : 2; // encryption excludes compression; without encryption compression may remain as is
                     chDlg.Encrypted = encrypted;
                 }
                 chDlg.ChangeTimeModified = FALSE;
@@ -346,8 +346,8 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                 chDlg.ChangeTimeAccessed = FALSE;
                 chDlg.RecurseSubDirs = TRUE;
 
-                if (setCompress && Configuration.CnfrmNTFSPress || // zeptame se jestli kompresi/dekompresi provest
-                    setEncryption && Configuration.CnfrmNTFSCrypt) // zeptame se jestli sifrovani/desifrovani provest
+                if (setCompress && Configuration.CnfrmNTFSPress || // ask whether to compress/decompress
+                    setEncryption && Configuration.CnfrmNTFSCrypt) // ask whether to encrypt/decrypt
                 {
                     char subject[MAX_PATH + 100];
                     char expanded[200];
@@ -409,10 +409,10 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                                        LoadStr(resTitleID), &str, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL);
                     if (msgBox.Execute() != IDYES)
                     {
-                        // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+                        // if we selected an item, deselect it again
                         UnselectItemWithName(temporarySelected);
                         FilesActionInProgress = FALSE;
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
+                        EndStopRefresh(); // snooper will start again now
                         return;
                     }
                     UpdateWindow(MainWindow->HWindow);
@@ -424,10 +424,10 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
 
                 if (CheckPath(TRUE) != ERROR_SUCCESS)
                 {
-                    // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+                    // if we selected an item, we deselect it again
                     UnselectItemWithName(temporarySelected);
                     FilesActionInProgress = FALSE;
-                    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+                    EndStopRefresh(); // snooper will start again now
                     return;
                 }
 
@@ -453,7 +453,7 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                     SystemTimeToFileTime(&chDlg.TimeAccessed, &ft);
                     LocalFileTimeToFileTime(&ft, &dlgData.TimeAccessed);
                 }
-                //---  zjisteni jake adresare a soubory jsou oznacene
+                //---  determine which directories and files are selected
                 int* indexes = NULL;
                 CFileData* f = NULL;
                 int count = GetSelCount();
@@ -463,32 +463,32 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                     if (indexes == NULL)
                     {
                         TRACE_E(LOW_MEMORY);
-                        // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+                        // if we selected an item, we deselect it again
                         UnselectItemWithName(temporarySelected);
                         FilesActionInProgress = FALSE;
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
+                        EndStopRefresh(); // snooper will start again now
                         return;
                     }
                     GetSelItems(count, indexes);
                 }
-                else // nic neni oznaceno
+                else // nothing is selected
                 {
                     int i = GetCaretIndex();
                     if (i < 0 || i >= Dirs->Count + Files->Count)
                     {
-                        // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+                        // if we selected an item, we deselect it again
                         UnselectItemWithName(temporarySelected);
                         FilesActionInProgress = FALSE;
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
-                        return;           // spatny index (zadne soubory)
+                        EndStopRefresh(); // snooper will start again now
+                        return;           // invalid index (no files)
                     }
                     if (i == 0 && subDir)
                     {
-                        // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+                        // if we selected an item, we deselect it again
                         UnselectItemWithName(temporarySelected);
                         FilesActionInProgress = FALSE;
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
-                        return;           // se ".." nepracujem
+                        EndStopRefresh(); // snooper will start again now
+                        return;           // we do not work with ".."
                     }
                     f = (i < Dirs->Count) ? &Dirs->At(i) : &Files->At(i - Dirs->Count);
                 }
@@ -504,7 +504,7 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
 
                     HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
 
-                    // zajisteni korektniho vztahu mezi Compressed a Encrypted
+                    // ensure a correct relationship between Compressed and Encrypted
                     if (chDlg.Encrypted == 1)
                     {
                         if (chDlg.Compressed != 0)
@@ -577,13 +577,13 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                                                indexes, f, &attrsData, NULL, FALSE, NULL);
                     if (script->Count == 0)
                         res = FALSE;
-                    // prohozeno kvuli umozneni aktivace hlavniho okna (nesmi byt disable), jinak prepina do jine app
+                    // reordered to allow the main window to activate (must not be disabled), otherwise it switches to another app
                     EnableWindow(MainWindow->HWindow, TRUE);
                     DestroySafeWaitWindow();
 
-                    // pokud je aktivni Salamander, zavolame SetFocus na zapamatovane okno (SetFocus nefunguje
-                    // pokud je hl. okno disablovane - po deaktivaci/aktivaci disablovaneho hl. okna aktivni panel
-                    // nema fokus)
+                    // if Salamander is active, call SetFocus on the stored window (SetFocus fails
+                    // if the main window is disabled - after deactivation/activation of the disabled main window the active panel
+                    // does not have focus)
                     HWND hwnd = GetForegroundWindow();
                     while (hwnd != NULL && hwnd != MainWindow->HWindow)
                         hwnd = GetParent(hwnd);
@@ -592,8 +592,8 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
 
                     SetCursor(oldCur);
 
-                    // pripravime refresh neautomaticky refreshovanych adresaru
-                    // zmena v adresari zobrazenem v panelu a pokud se pracovalo i v podadresarich, tak i v podadresarich
+                    // prepare refresh of manually refreshed directories
+                    // change in the directory displayed in the panel and also in subdirectories if work was done there as well
                     script->SetWorkPath1(GetPath(), chDlg.RecurseSubDirs);
 
                     if (!res || !StartProgressDialog(script, LoadStr(IDS_CHANGEATTRSTITLE), &dlgData, NULL))
@@ -603,9 +603,9 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                             script->ResetState();
                         FreeScript(script);
                     }
-                    else // odstraneni sel. indexu (necekame az operace dobehne, bezi v jinem threadu)
+                    else // removal of selection index (no waiting for operation finish, operation runs in another thread)
                     {
-                        SetSel(FALSE, -1, TRUE);                        // explicitni prekresleni
+                        SetSel(FALSE, -1, TRUE);                        // explicit repaint
                         PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
                         UpdateWindow(MainWindow->HWindow);
                     }
@@ -613,7 +613,7 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                 //---
                 if (indexes != NULL)
                     delete[] (indexes);
-                //---  pokud je aktivni nejaky okno salamandra, konci suspend mode
+                //---  if a Salamander window is active, end suspend mode
             }
             UpdateWindow(MainWindow->HWindow);
             FilesActionInProgress = FALSE;
@@ -622,9 +622,9 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
     else
     {
         if (Is(ptPluginFS) && GetPluginFS()->NotEmpty() &&
-            GetPluginFS()->IsServiceSupported(FS_SERVICE_CHANGEATTRS)) // v panelu je FS
+            GetPluginFS()->IsServiceSupported(FS_SERVICE_CHANGEATTRS)) // FS is in the panel
         {
-            // snizime prioritu threadu na "normal" (aby operace prilis nezatezovaly stroj)
+            // lower the thread priority to "normal" (so the operations don't overload the machine)
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
             int panel = MainWindow->LeftPanel == this ? PANEL_LEFT : PANEL_RIGHT;
@@ -633,9 +633,9 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
             int selectedDirs = 0;
             if (count > 0)
             {
-                // spocitame kolik adresaru je oznaceno (zbytek oznacenych polozek jsou soubory)
+                // count how many directories are selected (the rest of the selected items are files)
                 int i;
-                for (i = 0; i < Dirs->Count; i++) // ".." nemuzou byt oznaceny, test by byl zbytecny
+                for (i = 0; i < Dirs->Count; i++) // ".." cannot be selected, the check would be useless
                 {
                     if (Dirs->At(i).Selected)
                         selectedDirs++;
@@ -647,21 +647,21 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
             BOOL success = GetPluginFS()->ChangeAttributes(GetPluginFS()->GetPluginFSName(), HWindow,
                                                            panel, count - selectedDirs, selectedDirs);
 
-            // opet zvysime prioritu threadu, operace dobehla
+            // raise the thread priority again, the operation has finished
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-            if (success) // uspech -> unselect
+            if (success) // success -> unselect
             {
-                SetSel(FALSE, -1, TRUE);                        // explicitni prekresleni
+                SetSel(FALSE, -1, TRUE);                        // explicit repaint
                 PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
                 UpdateWindow(MainWindow->HWindow);
             }
         }
     }
-    // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+    // if we selected an item, we deselect it again
     UnselectItemWithName(temporarySelected);
 
-    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+    EndStopRefresh(); // snooper will start again now
 }
 
 void CFilesWindow::FindFile()
@@ -672,7 +672,7 @@ void CFilesWindow::FindFile()
 
     if (Is(ptPluginFS) && GetPluginFS()->NotEmpty() &&
         GetPluginFS()->IsServiceSupported(FS_SERVICE_OPENFINDDLG))
-    { // zkusime otevrit Find pro FS v panelu, pokud se povede, nema uz smysl otevirat standardni Find
+    { // try to open Find for the FS in the panel; if it succeeds, there is no point in opening the standard Find dialog
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
         BOOL done = GetPluginFS()->OpenFindDialog(GetPluginFS()->GetPluginFSName(),
                                                   this == MainWindow->LeftPanel ? PANEL_LEFT : PANEL_RIGHT);
@@ -703,9 +703,9 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
 {
     CALL_STACK_MESSAGE6("CFilesWindow::ViewFile(%s, %d, %u, %d, %d)", name, altView, handlerID,
                         enumFileNamesSourceUID, enumFileNamesLastFileIndex);
-    // overime si jestli je soubor na pristupne ceste
+    // verify that the file is on an accessible path
     char path[MAX_PATH + 10];
-    if (name == NULL) // soubor z panelu
+    if (name == NULL) // file from the panel
     {
         if (Is(ptDisk) || Is(ptZIPArchive))
         {
@@ -713,7 +713,7 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                 return;
         }
     }
-    else // soubor z windowsove cesty (Find + Alt+F11)
+    else // file from a Windows path (Find + Alt+F11)
     {
         char* backSlash = strrchr(name, '\\');
         if (backSlash != NULL)
