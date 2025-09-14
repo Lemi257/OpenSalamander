@@ -1825,36 +1825,36 @@ void CFilesWindow::FillEditWithMenu(CMenuPopup* popup)
 
 void CFilesWindow::OnEditFileWith(int index)
 {
-    BeginStopRefresh(); // cmuchal si da pohov
+    BeginStopRefresh(); // snooper takes a break
 
-    // vytahnu seznam indexu vieweru
-    // vytahnu seznam indexu editoru
+    // get the list of viewer indexes
+    // get the list of editor indexes
     CEditorMasks* masks = MainWindow->EditorMasks;
 
     if (index < 0 || index >= masks->Count)
     {
         TRACE_E("index=" << index);
-        EndStopRefresh(); // ted uz zase cmuchal nastartuje
+        EndStopRefresh(); // snooper will start again now
         return;
     }
 
     EditFile(NULL, masks->At(index)->HandlerID);
 
-    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+    EndStopRefresh(); // snooper will start again now
 }
 
 void CFilesWindow::EditFileWith(char* name, HWND hMenuParent, const POINT* menuPoint, DWORD* handlerID)
 {
     CALL_STACK_MESSAGE3("CFilesWindow::EditFileWith(%s, , , %s)", name,
                         (handlerID == NULL ? "NULL" : "non-NULL"));
-    BeginStopRefresh(); // cmuchal si da pohov
+    BeginStopRefresh(); // snooper takes a break
     if (handlerID != NULL)
         *handlerID = 0xFFFFFFFF;
 
-    // vytahnu seznam indexu editoru
+    // get the list of editor indexes
     CEditorMasks* masks = MainWindow->EditorMasks;
 
-    // vytvorim menu
+    // create menu
     CMenuPopup contextPopup;
     FillEditWithMenu(&contextPopup);
     DWORD cmd = contextPopup.Track(MENU_TRACK_NONOTIFY | MENU_TRACK_RETURNCMD | MENU_TRACK_RIGHTBUTTON,
@@ -1868,7 +1868,7 @@ void CFilesWindow::EditFileWith(char* name, HWND hMenuParent, const POINT* menuP
             *handlerID = masks->At(index)->HandlerID;
     }
 
-    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+    EndStopRefresh(); // snooper will start again now
 }
 
 BOOL FileNameInvalidForManualCreate(const char* path)
@@ -1885,9 +1885,9 @@ BOOL FileNameInvalidForManualCreate(const char* path)
 
 BOOL MakeValidFileName(char* path)
 {
-    // oriznuti mezer na zacatku a mezer a tecek na konci jmena, dela to tak Explorer
-    // a lidi tlacili, ze to tak taky chteji, viz https://forum.altap.cz/viewtopic.php?f=16&t=5891
-    // a https://forum.altap.cz/viewtopic.php?f=2&t=4210
+    // trim spaces at the beginning and spaces and dots at the end of the name; Explorer does it
+    // and people wanted the same behavior, see https://forum.altap.cz/viewtopic.php?f=16&t=5891
+    // and https://forum.altap.cz/viewtopic.php?f=2&t=4210
     BOOL ch = FALSE;
     char* n = path;
     while (*n != 0 && *n <= ' ')
@@ -1910,7 +1910,7 @@ BOOL MakeValidFileName(char* path)
 
 BOOL CutSpacesFromBothSides(char* path)
 {
-    // oriznuti mezer na zacatku a na konci jmena
+    // trim spaces at the beginning and end of the name
     BOOL ch = FALSE;
     char* n = path;
     while (*n != 0 && *n <= ' ')
@@ -1946,16 +1946,16 @@ BOOL CutDoubleQuotesFromBothSides(char* path)
 void CFilesWindow::CreateDir(CFilesWindow* target)
 {
     CALL_STACK_MESSAGE1("CFilesWindow::CreateDir()");
-    BeginStopRefresh(); // cmuchal si da pohov
+    BeginStopRefresh(); // snooper takes a break
 
     char path[2 * MAX_PATH], nextFocus[MAX_PATH];
     path[0] = 0;
     nextFocus[0] = 0;
 
-    // obnova DefaultDir
+    // restore DefaultDir
     MainWindow->UpdateDefaultDir(MainWindow->GetActivePanel() == this);
 
-    if (Is(ptDisk)) // vytvoreni adresare na disku
+    if (Is(ptDisk)) // create directory on disk
     {
         CTruncatedString subject;
         subject.Set(LoadStr(IDS_CREATEDIRECTORY_TEXT), NULL);
@@ -1970,13 +1970,13 @@ void CFilesWindow::CreateDir(CFilesWindow* target)
         {
             UpdateWindow(MainWindow->HWindow);
 
-            // u diskovych cest preklopime '/' na '\\' a eliminujeme zdvojene backslashe
+            // for disk paths we flip '/' to '\\' and eliminate duplicate backslashes
             SlashesToBackslashesAndRemoveDups(path);
 
-            // ocistime jmeno od nezadoucich znaku na zacatku a konci,
-            // delame to jen u posledni komponenty, predesle bud jiz existuji a je to fuk (poresi si
-            // to system) nebo se pri vytvareni okontroluji a pripadne se zarve chyba (jen nedojde
-            // k ocisteni z nasi strany, at se user taky snazi, je to podprahovka)
+            // clean the name from undesirable characters at the beginning and end
+            // we do this only for the last component; the previous ones already exist and it doesn't matter 
+            // (the system handles it) or they are checked during creation and an error is shown 
+            // (we don't clean them, we let the user do some work, it's easy enough)
             char* lastCompName = strrchr(path, '\\');
             MakeValidFileName(lastCompName != NULL ? lastCompName + 1 : path);
 
@@ -1986,11 +1986,11 @@ void CFilesWindow::CreateDir(CFilesWindow* target)
             {
                 if (strlen(path) >= PATH_MAX_PATH)
                     errTextID = IDS_TOOLONGPATH;
-                /* i v pripade prazdneho retezce chceme chybovou hlasku
+                /* even if the string is empty we want an error message
         if (errTextID == IDS_EMPTYNAMENOTALLOWED)
         {
-          EndStopRefresh(); // ted uz zase cmuchal nastartuje
-          return; // prazdny string, neni co delat
+          EndStopRefresh(); // snooper will start again now
+          return; // empty string, nothing to do
         }
         */
                 SalMessageBox(HWindow, LoadStr(errTextID), LoadStr(IDS_ERRORCREATINGDIR),
@@ -2010,12 +2010,12 @@ void CFilesWindow::CreateDir(CFilesWindow* target)
                     goto CREATE_AGAIN;
                 if (newDir[0] != 0)
                 {
-                    // zmena jen v adresari, ve kterem se vytvoril prvni adresar (dalsi adresare neexistovaly, zmenu v nich nema smysl hlasit)
+                    // change only in the directory where the first directory was created (other directories did not exist, no reason to report changes there)
                     CutDirectory(newDir);
                     MainWindow->PostChangeOnPathNotification(newDir, FALSE);
                 }
 
-                //---  vytvoreni cesty
+                //---  path creation
                 while (1)
                 {
                     HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
@@ -2028,10 +2028,10 @@ void CFilesWindow::CreateDir(CFilesWindow* target)
                         if (nextFocus[0] != 0)
                             strcpy(NextFocusName, nextFocus);
 
-                        // zmena jen v adresari, ve kterem se vytvoril adresar
+                        // change only in the directory where the directory was created
                         MainWindow->PostChangeOnPathNotification(checkPath, FALSE);
 
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
+                        EndStopRefresh(); // snooper will start again now
                         return;
                     }
                     else
@@ -2051,16 +2051,16 @@ void CFilesWindow::CreateDir(CFilesWindow* target)
     else
     {
         if (Is(ptPluginFS) && GetPluginFS()->NotEmpty() &&
-            GetPluginFS()->IsServiceSupported(FS_SERVICE_CREATEDIR)) // v panelu je FS
+            GetPluginFS()->IsServiceSupported(FS_SERVICE_CREATEDIR)) // FS is in the panel
         {
-            // snizime prioritu threadu na "normal" (aby operace prilis nezatezovaly stroj)
+            // lower the thread priority to "normal" (so operations don't overload the machine)
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
             char newName[2 * MAX_PATH];
             newName[0] = 0;
             BOOL cancel = FALSE;
             BOOL ret = GetPluginFS()->CreateDir(GetPluginFS()->GetPluginFSName(), 1, HWindow, newName, cancel);
-            if (!cancel) // nejde o cancel operace
+            if (!cancel) // not a cancel of the operation
             {
                 if (!ret)
                 {
@@ -2072,13 +2072,13 @@ void CFilesWindow::CreateDir(CFilesWindow* target)
                                         FALSE);
                     while (1)
                     {
-                        // otevreme standardni dialog
+                        // open the standard dialog
                         if (dlg.Execute() == IDOK)
                         {
                             strcpy(newName, path);
                             ret = GetPluginFS()->CreateDir(GetPluginFS()->GetPluginFSName(), 2, HWindow, newName, cancel);
                             if (ret || cancel)
-                                break; // nejde o chybu (cancel nebo uspech)
+                                break; // not an error (cancel or success)
                             strcpy(path, newName);
                         }
                         else
@@ -2090,19 +2090,19 @@ void CFilesWindow::CreateDir(CFilesWindow* target)
                     }
                 }
 
-                if (ret && !cancel) // uspesne dokoncena operace
+                if (ret && !cancel) // operation completed successfully
                 {
-                    lstrcpyn(NextFocusName, newName, MAX_PATH); // zajistime fokus noveho jmena po refreshi
+                    lstrcpyn(NextFocusName, newName, MAX_PATH); // ensure focus of the new name after refresh
                 }
             }
 
-            // opet zvysime prioritu threadu, operace dobehla
+            // raise the thread priority again, the operation has finished
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
         }
     }
 
     UpdateWindow(MainWindow->HWindow);
-    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+    EndStopRefresh(); // snooper will start again now
 }
 
 void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName, BOOL* mayChange, BOOL* tryAgain)
@@ -2117,7 +2117,7 @@ void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName
         char finalName[2 * MAX_PATH];
         MaskName(finalName, 2 * MAX_PATH, f->Name, formatedFileName);
 
-        // ocistime jmeno od nezadoucich znaku na zacatku a konci
+        // clean the name from undesirable characters at the beginning and end
         MakeValidFileName(finalName);
 
         int l = (int)strlen(GetPath());
@@ -2145,7 +2145,7 @@ void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName
             CFilesWindow* otherPanel = MainWindow->GetNonActivePanel();
             int otherPanelPathLen = (int)strlen(otherPanel->GetPath());
             int pathLen = (int)strlen(path);
-            // menime cestu druhemu panelu?
+            // are we changing the path of the other panel?
             if (otherPanelPathLen >= pathLen &&
                 StrNICmp(path, otherPanel->GetPath(), pathLen) == 0 &&
                 (otherPanelPathLen == pathLen ||
@@ -2157,8 +2157,8 @@ void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName
 
             *mayChange = TRUE;
 
-            // zkusime prejmenovani nejdrive z dlouheho jmena a v pripade problemu jeste
-            // z DOS-jmena (resi soubor/adresare dosazitelne jen pres Unicode nebo DOS-jmena)
+            // try renaming from the long name first and if there is a problem then
+            // from the DOS name (handles files/directories accessible only via Unicode or DOS names)
             BOOL moveRet = SalMoveFile(path, tgtPath);
             DWORD err = 0;
             if (!moveRet)
@@ -2185,8 +2185,8 @@ void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName
             }
             else
             {
-                if (StrICmp(path, tgtPath) != 0 && // pokud nejde jen o change-case
-                    (err == ERROR_FILE_EXISTS ||   // zkontrolujeme, jestli nejde jen o prepis dosoveho jmena souboru
+                if (StrICmp(path, tgtPath) != 0 && // if it isn't just change-case
+                    (err == ERROR_FILE_EXISTS ||   // check whether it's only rewriting the DOS name of the file
                      err == ERROR_ALREADY_EXISTS))
                 {
                     WIN32_FIND_DATA data;
@@ -2195,10 +2195,10 @@ void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName
                     {
                         HANDLES(FindClose(find));
                         const char* tgtName = SalPathFindFileName(tgtPath);
-                        if (StrICmp(tgtName, data.cAlternateFileName) == 0 && // shoda jen pro dos name
-                            StrICmp(tgtName, data.cFileName) != 0)            // (plne jmeno je jine)
+                        if (StrICmp(tgtName, data.cAlternateFileName) == 0 && // match only for DOS name
+                            StrICmp(tgtName, data.cFileName) != 0)            // (full name differs)
                         {
-                            // prejmenujeme ("uklidime") soubor/adresar s konfliktnim dos name do docasneho nazvu 8.3 (nepotrebuje extra dos name)
+                            // rename ("clean up") the file/directory with the conflicting DOS name to a temporary 8.3 name (no extra DOS name needed)
                             char tmpName[MAX_PATH + 20];
                             lstrcpyn(tmpName, tgtPath, MAX_PATH);
                             CutDirectory(tmpName);
@@ -2221,11 +2221,11 @@ void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName
                                         break;
                                     }
                                 }
-                                if (tmpName[0] != 0) // pokud se podarilo "uklidit" konfliktni soubor, zkusime presun
-                                {                    // souboru znovu, pak vratime "uklizenemu" souboru jeho puvodni jmeno
+                                if (tmpName[0] != 0) // if we successfully "cleaned" the conflicting file, try moving
+                                {                    // the file again, then return the temporary file its original name
                                     BOOL moveDone = SalMoveFile(path, tgtPath);
                                     if (!SalMoveFile(tmpName, origFullName))
-                                    { // toto se zjevne muze stat, nepochopitelne, ale Windows vytvori misto 'tgtPath' (dos name) soubor se jmenem origFullName
+                                    { // this can apparently happen: Windows creates a file named origFullName instead of 'tgtPath' (DOS name)
                                         TRACE_I("CFilesWindow::RenameFileInternal(): Unexpected situation: unable to rename file from tmp-name to original long file name! " << origFullName);
                                         if (moveDone)
                                         {
@@ -2247,14 +2247,14 @@ void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName
                 }
                 if ((err == ERROR_ALREADY_EXISTS ||
                      err == ERROR_FILE_EXISTS) &&
-                    StrICmp(path, tgtPath) != 0) // prepsat soubor ?
+                    StrICmp(path, tgtPath) != 0) // overwrite the file?
                 {
                     DWORD inAttr = SalGetFileAttributes(path);
                     DWORD outAttr = SalGetFileAttributes(tgtPath);
 
                     if ((inAttr & FILE_ATTRIBUTE_DIRECTORY) == 0 &&
                         (outAttr & FILE_ATTRIBUTE_DIRECTORY) == 0)
-                    { // jen pokud jsou oba soubory
+                    { // only if both are files
                         HANDLE in = HANDLES_Q(CreateFile(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
                                                          OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
                                                          NULL));
@@ -2282,7 +2282,7 @@ void CFilesWindow::RenameFileInternal(CFileData* f, const char* formatedFileName
 
                             case IDYES:
                             {
-                                ClearReadOnlyAttr(tgtPath); // aby sel smazat ...
+                                ClearReadOnlyAttr(tgtPath); // so it can be deleted ...
                                 if (!DeleteFile(tgtPath) || !SalMoveFile(path, tgtPath))
                                     err = GetLastError();
                                 else
@@ -2336,7 +2336,7 @@ void CFilesWindow::RenameFile(int specialIndex)
     else
         i = GetCaretIndex();
     if (i < 0 || i >= Dirs->Count + Files->Count)
-        return; // spatny index
+        return; // invalid index
 
     BOOL subDir;
     if (Dirs->Count > 0)
@@ -2344,7 +2344,7 @@ void CFilesWindow::RenameFile(int specialIndex)
     else
         subDir = FALSE;
     if (i == 0 && subDir)
-        return; // se ".." nepracujem
+        return; // we do not work with ".."
 
     CFileData* f = NULL;
     BOOL isDir = i < Dirs->Count;
@@ -2361,7 +2361,7 @@ void CFilesWindow::RenameFile(int specialIndex)
                         &subject, IDD_RENAMEDIALOG, Configuration.QuickRenameHistory,
                         QUICKRENAME_HISTORY_SIZE, FALSE);
 
-    if (Is(ptDisk)) // prejmenovani na disku
+    if (Is(ptDisk)) // rename on disk
     {
 #ifndef _WIN64
         if (Windows64Bit && isDir)
@@ -2378,24 +2378,24 @@ void CFilesWindow::RenameFile(int specialIndex)
         }
 #endif // _WIN64
 
-        BeginSuspendMode(); // cmuchal si da pohov
+        BeginSuspendMode(); // snooper takes a break
 
         BOOL mayChange = FALSE;
         while (1)
         {
-            // pokud neni vybrana zadna polozka, vybereme tu pod focusem a ulozime jeji jmeno
+            // if no item is selected, select the one under focus and store its name
             char temporarySelected[MAX_PATH];
             SelectFocusedItemAndGetName(temporarySelected, MAX_PATH);
 
-            // Od Windows Vista MS zavedli velice zadanou vec: quick rename implicitne oznaci pouze nazev bez tecky a pripony
-            // stejny kod je zde ctyrikrat
+            // Since Windows Vista, Microsoft introduced a demanded feature: quick rename selects only the name without the dot and extension
+            // the same code appears here four times
             if (!Configuration.QuickRenameSelectAll)
             {
                 int selectionEnd = -1;
                 if (!isDir)
                 {
                     const char* dot = strrchr(formatedFileName, '.');
-                    if (dot != NULL && dot > formatedFileName) // sice plati, ze ".cvspass" ve Windows je pripona, ale Explorer pro ".cvspass" oznacuje cele jmeno, tak to delame take
+                    if (dot != NULL && dot > formatedFileName) // although ".cvspass" is an extension in Windows, Explorer selects the entire name, so we do the same
                                                                //        if (dot != NULL)
                         selectionEnd = (int)(dot - formatedFileName);
                 }
@@ -2404,7 +2404,7 @@ void CFilesWindow::RenameFile(int specialIndex)
 
             int dlgRes = (int)dlg.Execute();
 
-            // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+            // if we selected an item, we deselect it again
             UnselectItemWithName(temporarySelected);
 
             if (dlgRes == IDOK)
@@ -2420,58 +2420,58 @@ void CFilesWindow::RenameFile(int specialIndex)
                 break;
         }
 
-        // refresh neautomaticky refreshovanych adresaru
+        // refresh of manually refreshed directories
         if (mayChange)
         {
-            // zmena v adresari zobrazenem v panelu a pokud se prejmenovaval adresar, tak i v podadresarich
+            // change in the directory shown in the panel and, if a directory was renamed, then also in subdirectories
             MainWindow->PostChangeOnPathNotification(GetPath(), isDir);
         }
 
-        // pokud je aktivni nejaky okno salamandra, konci suspend mode
+        // if a Salamander window is active, end suspend mode
         EndSuspendMode();
     }
     else
     {
         if (Is(ptPluginFS) && GetPluginFS()->NotEmpty() &&
-            GetPluginFS()->IsServiceSupported(FS_SERVICE_QUICKRENAME)) // v panelu je FS
+            GetPluginFS()->IsServiceSupported(FS_SERVICE_QUICKRENAME)) // FS is in the panel
         {
-            BeginSuspendMode(); // cmuchal si da pohov
+            BeginSuspendMode(); // snooper takes a break
 
-            // snizime prioritu threadu na "normal" (aby operace prilis nezatezovaly stroj)
+            // lower the thread priority to "normal" (so operations don't overload the machine)
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
             char newName[MAX_PATH];
             newName[0] = 0;
             BOOL cancel = FALSE;
 
-            // pokud neni vybrana zadna polozka, vybereme tu pod focusem a ulozime jeji jmeno
+            // if no item is selected, select the one under focus and store its name
             char temporarySelected[MAX_PATH];
             SelectFocusedItemAndGetName(temporarySelected, MAX_PATH);
 
             BOOL ret = GetPluginFS()->QuickRename(GetPluginFS()->GetPluginFSName(), 1, HWindow, *f, isDir, newName, cancel);
 
-            // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+            // if we selected an item, we deselect it again
             UnselectItemWithName(temporarySelected);
 
-            if (!cancel) // nejde o cancel operace
+            if (!cancel) // not a cancel of the operation
             {
                 if (!ret)
                 {
                     while (1)
                     {
-                        // otevreme standardni dialog
-                        // pokud neni vybrana zadna polozka, vybereme tu pod focusem a ulozime jeji jmeno
+                        // open the standard dialog
+                        // if no item is selected, select the one under focus and store its name
                         SelectFocusedItemAndGetName(temporarySelected, MAX_PATH);
 
-                        // Od Windows Vista MS zavedli velice zadanou vec: quick rename implicitne oznaci pouze nazev bez tecky a pripony
-                        // stejny kod je zde ctyrikrat
+                        // Since Windows Vista, Microsoft introduced a demanded feature: quick rename selects only the name without the dot and extension
+                        // the same code appears here four times
                         if (!Configuration.QuickRenameSelectAll)
                         {
                             int selectionEnd = -1;
                             if (!isDir)
                             {
                                 const char* dot = strrchr(formatedFileName, '.');
-                                if (dot != NULL && dot > formatedFileName) // sice plati, ze ".cvspass" ve Windows je pripona, ale Explorer pro ".cvspass" oznacuje cele jmeno, tak to delame take
+                                if (dot != NULL && dot > formatedFileName) // although ".cvspass" is an extension in Windows, Explorer selects the entire name, so we do the same
                                                                            //        if (dot != NULL)
                                     selectionEnd = (int)(dot - formatedFileName);
                             }
@@ -2480,7 +2480,7 @@ void CFilesWindow::RenameFile(int specialIndex)
 
                         int dlgRes = (int)dlg.Execute();
 
-                        // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+                        // if we selected an item, we deselect it again
                         UnselectItemWithName(temporarySelected);
 
                         if (dlgRes == IDOK)
@@ -2488,7 +2488,7 @@ void CFilesWindow::RenameFile(int specialIndex)
                             strcpy(newName, formatedFileName);
                             ret = GetPluginFS()->QuickRename(GetPluginFS()->GetPluginFSName(), 2, HWindow, *f, isDir, newName, cancel);
                             if (ret || cancel)
-                                break; // nejde o chybu (cancel nebo uspech)
+                                break; // not an error (cancel or success)
                             strcpy(formatedFileName, newName);
                         }
                         else
@@ -2500,16 +2500,16 @@ void CFilesWindow::RenameFile(int specialIndex)
                     }
                 }
 
-                if (ret && !cancel) // uspesne dokoncena operace
+                if (ret && !cancel) // operation completed successfully 
                 {
-                    strcpy(NextFocusName, newName); // zajistime fokus noveho jmena po refreshi
+                    strcpy(NextFocusName, newName); // ensure focus of the new name after refresh
                 }
             }
 
-            // opet zvysime prioritu threadu, operace dobehla
+            // raise the thread priority again, the operation has finished
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-            // pokud je aktivni nejaky okno salamandra, konci suspend mode
+            // if a Salamander window is active, end suspend mode
             EndSuspendMode();
         }
     }
@@ -2529,7 +2529,7 @@ BOOL CFilesWindow::IsQuickRenameActive()
 
 void CFilesWindow::AdjustQuickRenameRect(const char* text, RECT* r)
 {
-    // namerim delku textu
+    // measure the length of the text
     HDC hDC = HANDLES(GetDC(ListBox->HWindow));
     HFONT hOldFont = (HFONT)SelectObject(hDC, Font);
     SIZE sz;
@@ -2551,7 +2551,7 @@ void CFilesWindow::AdjustQuickRenameRect(const char* text, RECT* r)
     if (r->right - r->left < minWidth)
         r->right = r->left + minWidth;
 
-    // nechceme presahnout hranici panelu
+    // we do not want to exceed the panel boundaries
     RECT maxR = ListBox->FilesRect;
     if (r->left < maxR.left)
         r->left = maxR.left;
@@ -2580,8 +2580,8 @@ void CFilesWindow::AdjustQuickRenameWindow()
 }
 
 /*
-// narazil jsem na problem s razenim, vista necha polozky na svem miste, ale salamander je potrebuje zaradit
-// takze vec zatim davam k ledu
+// I ran into a sorting issue: Vista keeps items in place, but Salamander needs to insert them
+// so I'm shelving this for now
 void
 CFilesWindow::QuickRenameOnIndex(int index)
 {
@@ -2616,7 +2616,7 @@ void CFilesWindow::QuickRenameBegin(int index, const RECT* labelRect)
     }
 
     if (index < 0 || index >= Dirs->Count + Files->Count)
-        return; // spatny index
+        return; // invalid index
 
     BOOL subDir;
     if (Dirs->Count > 0)
@@ -2624,7 +2624,7 @@ void CFilesWindow::QuickRenameBegin(int index, const RECT* labelRect)
     else
         subDir = FALSE;
     if (index == 0 && subDir)
-        return; // se ".." nepracujem
+        return; // we do not work with ".."
 
     CFileData* f = NULL;
     BOOL isDir = index < Dirs->Count;
@@ -2633,52 +2633,52 @@ void CFilesWindow::QuickRenameBegin(int index, const RECT* labelRect)
     char formatedFileName[MAX_PATH];
     AlterFileName(formatedFileName, f->Name, -1, Configuration.FileNameFormat, 0, isDir);
 
-    // Od Windows Vista MS zavedli velice zadanou vec: quick rename implicitne oznaci pouze nazev bez tecky a pripony
-    // stejny kod je zde ctyrikrat
+    // Since Windows Vista, Microsoft introduced a demanded feature: quick rename selects only the name without the dot and extension
+    // the same code appears here four times
     int selectionEnd = -1;
     if (!Configuration.QuickRenameSelectAll)
     {
         if (!isDir)
         {
             const char* dot = strrchr(formatedFileName, '.');
-            if (dot != NULL && dot > formatedFileName) // sice plati, ze ".cvspass" ve Windows je pripona, ale Explorer pro ".cvspass" oznacuje cele jmeno, tak to delame take
+            if (dot != NULL && dot > formatedFileName) // although ".cvspass" is an extension in Windows, Explorer selects the entire name, so we do the same
                                                        //    if (dot != NULL)
                 selectionEnd = (int)(dot - formatedFileName);
         }
     }
 
-    // pokud jde o FS, musime napred volat QuickRename v mode=1
-    // tedy umoznit file systemu otevrit vlastni rename dialog
+    // if this is a FS, we must first call QuickRename with mode=1
+    // allowing the file system to open its own rename dialog
     if (Is(ptPluginFS) && GetPluginFS()->NotEmpty() &&
-        GetPluginFS()->IsServiceSupported(FS_SERVICE_QUICKRENAME)) // v panelu je FS
+        GetPluginFS()->IsServiceSupported(FS_SERVICE_QUICKRENAME)) // FS is in the panel
     {
-        BeginSuspendMode(); // cmuchal si da pohov
+        BeginSuspendMode(); // snooper takes a break
 
-        // snizime prioritu threadu na "normal" (aby operace prilis nezatezovaly stroj)
+        // lower the thread priority to "normal" (so operations don't overload the machine)
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
         char newName[MAX_PATH];
         newName[0] = 0;
         BOOL cancel = FALSE;
 
-        // pokud neni vybrana zadna polozka, vybereme tu pod focusem a ulozime jeji jmeno
+        // if no item is selected, select the one under focus and store its name
         char temporarySelected[MAX_PATH];
         SelectFocusedItemAndGetName(temporarySelected, MAX_PATH);
 
         BOOL ret = GetPluginFS()->QuickRename(GetPluginFS()->GetPluginFSName(), 1, HWindow, *f, isDir, newName, cancel);
 
-        // pokud jsme nejakou polozku vybrali, zase ji odvyberem
+        // if we selected an item, we deselect it again
         UnselectItemWithName(temporarySelected);
 
-        if (ret && !cancel) // uspesne dokoncena operace
+        if (ret && !cancel) // operation completed successfully
         {
-            strcpy(NextFocusName, newName); // zajistime fokus noveho jmena po refreshi
+            strcpy(NextFocusName, newName); // ensure focus of the new name after refresh
         }
 
-        // opet zvysime prioritu threadu, operace dobehla
+        // raise the thread priority again, the operation has finished
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-        // pokud je aktivni nejaky okno salamandra, konci suspend mode
+        // if a Salamander window is active, end suspend mode
         EndSuspendMode();
 
         if (cancel || ret)
@@ -2703,16 +2703,16 @@ void CFilesWindow::QuickRenameBegin(int index, const RECT* labelRect)
         return;
     }
 
-    BeginSuspendMode(TRUE); // cmuchal si da pohov
+    BeginSuspendMode(TRUE); // snooper takes a break
 
-    // font jako ma panel
+    // font the same as the panel
     SendMessage(hWnd, WM_SETFONT, (WPARAM)Font, 0);
     int leftMargin = LOWORD(SendMessage(hWnd, EM_GETMARGINS, 0, 0));
     if (leftMargin < 2)
         SendMessage(hWnd, EM_SETMARGINS, EC_LEFTMARGIN, 2);
 
     //SendMessage(hWnd, EM_SETSEL, 0, -1); // select all
-    // umime vyberat pouze nazev bez tecky a pripony
+    // we can select only the name without dot and extension
     SendMessage(hWnd, EM_SETSEL, 0, selectionEnd);
 
     ShowWindow(hWnd, SW_SHOW);
@@ -2725,10 +2725,10 @@ void CFilesWindow::QuickRenameEnd()
     CALL_STACK_MESSAGE1("CFilesWindow::QuickRenameEnd()");
     if (QuickRenameWindow.HWindow != NULL && QuickRenameWindow.GetCloseEnabled())
     {
-        // pokud je aktivni nejaky okno salamandra, konci suspend mode
+        // if a Salamander window is active, end suspend mode
         EndSuspendMode(TRUE);
 
-        // nechceme zacykleni diky WM_KILLFOCUS a spol.
+        // avoid cycles caused by WM_KILLFOCUS and similar
         BOOL old = QuickRenameWindow.GetCloseEnabled();
         QuickRenameWindow.SetCloseEnabled(FALSE);
 
@@ -2750,7 +2750,7 @@ BOOL CFilesWindow::HandeQuickRenameWindowKey(WPARAM wParam)
 
     int index = GetCaretIndex();
     if (index < 0 || index >= Dirs->Count + Files->Count)
-        return TRUE; // spatny index
+        return TRUE; // invalid index
     CFileData* f = NULL;
     BOOL isDir = index < Dirs->Count;
     f = isDir ? &Dirs->At(index) : &Files->At(index - Dirs->Count);
@@ -2761,7 +2761,7 @@ BOOL CFilesWindow::HandeQuickRenameWindowKey(WPARAM wParam)
     char newName[MAX_PATH];
     GetWindowText(hWnd, newName, MAX_PATH);
 
-    // snizime prioritu threadu na "normal" (aby operace prilis nezatezovaly stroj)
+    // lower the thread priority to "normal" (so operations don't overload the machine)
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
     BOOL tryAgain = FALSE;
