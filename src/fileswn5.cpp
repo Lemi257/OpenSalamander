@@ -156,7 +156,7 @@ void CFilesWindow::Convert()
 
                             // none of the files had to pass through the mask filter
                             SetSel(FALSE, -1, TRUE);                        // explicit repaint
-                            PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                            PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // selection change notify
                         }
                         UpdateWindow(MainWindow->HWindow);
                         if (!script->IsGood())
@@ -166,7 +166,7 @@ void CFilesWindow::Convert()
                     else // removal of selection index (no waiting for operation finish, operation runs in another thread)
                     {
                         SetSel(FALSE, -1, TRUE);                        // explicit repaint
-                        PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                        PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // selection change notify
                         UpdateWindow(MainWindow->HWindow);
                     }
                 }
@@ -605,8 +605,8 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                     }
                     else // removal of selection index (no waiting for operation finish, operation runs in another thread)
                     {
-                        SetSel(FALSE, -1, TRUE);                        // explicit repaint
-                        PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                        SetSel(FALSE, -1, TRUE);                    // explicit repaint
+                    PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // selection change notify
                         UpdateWindow(MainWindow->HWindow);
                     }
                 }
@@ -635,7 +635,7 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
             {
                 // count how many directories are selected (the rest of the selected items are files)
                 int i;
-                for (i = 0; i < Dirs->Count; i++) // ".." cannot be selected, the check would be useless
+                for (i = 0; i < Dirs->Count; i++) // ".." cannot be selected, the check would be unnecessary
                 {
                     if (Dirs->At(i).Selected)
                         selectedDirs++;
@@ -653,7 +653,7 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
             if (success) // success -> unselect
             {
                 SetSel(FALSE, -1, TRUE);                        // explicit repaint
-                PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // selection change notify
                 UpdateWindow(MainWindow->HWindow);
             }
         }
@@ -726,10 +726,10 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
     }
 
     BOOL addToHistory = name != NULL;
-    // pokud jde o view/edit z panelu, ziskame plne dlouhe jmeno
-    BOOL useDiskCache = FALSE;          // TRUE jen pro ZIP - pouziva disk-cache
-    BOOL arcCacheCacheCopies = TRUE;    // cachovat kopie v disk-cache, pokud si plugin archivatoru nepreje jinak
-    char dcFileName[3 * MAX_PATH + 50]; // ZIP: jmeno pro disk-cache
+    // if viewing/editing from the panel, obtain the full long name
+    BOOL useDiskCache = FALSE;          // TRUE only for ZIP - uses disk-cache
+    BOOL arcCacheCacheCopies = TRUE;    // cache copies in disk-cache unless the archiver plugin requests otherwise
+    char dcFileName[3 * MAX_PATH + 50]; // ZIP: name for disk-cache
     if (name == NULL)
     {
         int i = GetCaretIndex();
@@ -757,8 +757,8 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                 }
                 else
                     strcpy(s, f->Name);
-                // zkusime jestli je jmeno souboru platne, pripadne zkusime jeste jeho DOS-jmeno
-                // (resi soubory dosazitelne jen pres Unicode nebo DOS-jmena)
+                // try whether the file name is valid, otherwise try its DOS name
+                // (handles files accessible only through Unicode or DOS names)
                 if (f->DosName != NULL && SalGetFileAttributes(path) == 0xffffffff)
                 {
                     DWORD err = GetLastError();
@@ -767,7 +767,7 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                         if (strlen(f->DosName) + (s - path) < MAX_PATH)
                         {
                             strcpy(s, f->DosName);
-                            if (SalGetFileAttributes(path) == 0xffffffff) // stale chyba -> vracime se na long-name
+                            if (SalGetFileAttributes(path) == 0xffffffff) // still error -> revert to the long name
                             {
                                 if ((s - path) + f->NameLen < MAX_PATH)
                                     strcpy(s, f->Name);
@@ -783,7 +783,7 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                 if (Is(ptZIPArchive))
                 {
                     useDiskCache = TRUE;
-                    StrICpy(dcFileName, GetZIPArchive()); // jmeno souboru archivu se ma porovnavat "case-insensitive" (Windows file system), prevedeme ho proto vzdy na mala pismenka
+                    StrICpy(dcFileName, GetZIPArchive()); // the archive file name should be compared case-insensitively (Windows file system), so we always convert it to lowercase
                     if (GetZIPPath()[0] != 0)
                     {
                         if (GetZIPPath()[0] != '\\')
@@ -794,17 +794,17 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                         strcat(dcFileName, "\\");
                     strcat(dcFileName, f->Name);
 
-                    // nastaveni disk-cache pro plugin (std. hodnoty se zmeni jen u pluginu)
+                    // setting disk-cache for the plugin (standard values change only for the plugin)
                     char arcCacheTmpPath[MAX_PATH];
                     arcCacheTmpPath[0] = 0;
                     BOOL arcCacheOwnDelete = FALSE;
-                    CPluginInterfaceAbstract* plugin = NULL; // != NULL pokud ma plugin sve vlastni mazani
+                    CPluginInterfaceAbstract* plugin = NULL; // != NULL if the plugin handles its own deletion
                     int format = PackerFormatConfig.PackIsArchive(GetZIPArchive());
-                    if (format != 0) // nasli jsme podporovany archiv
+                    if (format != 0) // a supported archive was found
                     {
                         format--;
                         int index = PackerFormatConfig.GetUnpackerIndex(format);
-                        if (index < 0) // view: jde o interni zpracovani (plug-in)?
+                        if (index < 0) // view: is the processing internal (plugin)?
                         {
                             CPluginData* data = Plugins.Get(-index - 1);
                             if (data != NULL)
@@ -819,10 +819,10 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                     char nameInArchive[2 * MAX_PATH];
                     strcpy(nameInArchive, dcFileName + strlen(GetZIPArchive()) + 1);
 
-                    // krome sebe sameho porovnavame soubor se vsemi ostatnimi a hledame case-sensitive shodne jmeno;
-                    // pokud existuje, musime tyto dva soubory od sebe v disk-cache necim odlisit, zvolil jsem
-                    // alokovanou adresu Name - v protilehlych panelech se stejnym archivem to disk-cache nepouzije,
-                    // ale vzhledem k nepravdepodobnosti tohoto pripadu, je to dobre i tak az az
+                    // besides itself, compare the file with all the others and look for a case-sensitive identical name;
+                    // if it exists, these two files must be distinguished in the disk-cache; I chose
+                    // an allocated Name address - in opposite panels with the same archive the disk-cache won't be used,
+                    // but given the improbability of this case, this approach is more than sufficient
                     int x;
                     for (x = 0; x < Files->Count; x++)
                     {
@@ -861,13 +861,13 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                         return;
                     }
 
-                    if (!exists) // musime ho vypakovat
+                    if (!exists) // we must unpack it
                     {
                         char* backSlash = strrchr(name, '\\');
                         char tmpPath[MAX_PATH];
                         memcpy(tmpPath, name, backSlash - name);
                         tmpPath[backSlash - name] = 0;
-                        BeginStopRefresh(); // cmuchal si da pohov
+                        BeginStopRefresh(); // snooper takes a break
                         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
                         HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
                         BOOL renamingNotSupported = FALSE;
@@ -883,7 +883,7 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                             if (file != INVALID_HANDLE_VALUE)
                             {
                                 DWORD err;
-                                SalGetFileSize(file, size, err); // chyby ignorujeme, velikost souboru neni az tak dulezita
+                                SalGetFileSize(file, size, err); // ignore errors; file size isn't that important
                                 HANDLES(CloseHandle(file));
                             }
                             DiskCache.NamePrepared(dcFileName, size);
@@ -891,36 +891,36 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
                         else
                         {
                             SetCursor(oldCur);
-                            if (renamingNotSupported) // aby se stejna hlaska nedoplnovala do hromady pluginu, vypiseme ji zde pro vsechny
+                            if (renamingNotSupported) // to avoid repeating the same message for many plugins, display it here for all of them
                             {
                                 SalMessageBox(HWindow, LoadStr(IDS_UNPACKINVNAMERENUNSUP),
                                               LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
                             }
                             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-                            DiskCache.ReleaseName(dcFileName, FALSE); // nevypakovano, neni co cachovat
-                            EndStopRefresh();                         // ted uz zase cmuchal nastartuje
+                            DiskCache.ReleaseName(dcFileName, FALSE); // not unpacked, nothing to cache
+                            EndStopRefresh();                         // snooper will start again now
                             return;
                         }
-                        EndStopRefresh(); // ted uz zase cmuchal nastartuje
+                        EndStopRefresh(); // snooper will start again now
                     }
                 }
                 else
                 {
                     if (Is(ptPluginFS))
                     {
-                        if (GetPluginFS()->NotEmpty() && // FS je v poradku a podporuje view-file
+                        if (GetPluginFS()->NotEmpty() && // FS is fine and supports view-file
                             GetPluginFS()->IsServiceSupported(FS_SERVICE_VIEWFILE))
                         {
-                            // snizime prioritu threadu na "normal" (aby operace prilis nezatezovaly stroj)
+                            // lower the thread priority to "normal" (so the operations don't overload the machine)
                             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
                             CSalamanderForViewFileOnFS sal(altView, handlerID);
                             GetPluginFS()->ViewFile(GetPluginFS()->GetPluginFSName(), HWindow, &sal, *f);
 
-                            // opet zvysime prioritu threadu, operace dobehla
+                            // raise the thread priority again, the operation has finished
                             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
                         }
-                        return; // view na FS uz je hotovy
+                        return; // view on the FS is already done
                     }
                     else
                     {
@@ -943,11 +943,11 @@ void CFilesWindow::ViewFile(char* name, BOOL altView, DWORD handlerID, int enumF
 
     if (useDiskCache)
     {
-        if (lock != NULL) // zajistime provazani mezi viewerem a disk-cache
+        if (lock != NULL) // ensure association between the viewer and disk-cache
         {
             DiskCache.AssignName(dcFileName, lock, lockOwner, arcCacheCacheCopies ? crtCache : crtDirect);
         }
-        else // neotevrel se viewer nebo jen nema "lock" objekt - soubor zkusime aspon nechat v disk-cache
+        else // viewer didn't open or has no "lock" object - try leaving the file in disk-cache
         {
             DiskCache.ReleaseName(dcFileName, arcCacheCacheCopies);
         }
@@ -962,7 +962,7 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
     lock = NULL;
     lockOwner = FALSE;
 
-    // ziskani plneho DOS jmena
+    // obtain the full DOS name
     char dosName[MAX_PATH];
     if (GetShortPathName(name, dosName, MAX_PATH) == 0)
     {
@@ -970,7 +970,7 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
         dosName[0] = 0;
     }
 
-    // najdeme jmeno souboru a zjistime jestli ma priponu - potrebne pro masky
+    // find the file name and check if it has an extension - needed for masks
     const char* namePart = strrchr(name, '\\');
     if (namePart == NULL)
     {
@@ -979,37 +979,37 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
     }
     namePart++;
     const char* tmpExt = strrchr(namePart, '.');
-    //if (tmpExt == NULL || tmpExt == namePart) tmpExt = namePart + lstrlen(namePart); // ".cvspass" neni pripona ...
+    //if (tmpExt == NULL || tmpExt == namePart) tmpExt = namePart + lstrlen(namePart); // ".cvspass" is not an extension...
     if (tmpExt == NULL)
-        tmpExt = namePart + lstrlen(namePart); // ".cvspass" ve Windows je pripona ...
+        tmpExt = namePart + lstrlen(namePart); // ".cvspass" is treated as an extension in Windows...
     else
         tmpExt++;
 
-    // pozice pro viewery
+    // position for viewers
     WINDOWPLACEMENT place;
     place.length = sizeof(WINDOWPLACEMENT);
     GetWindowPlacement(MainWindow->HWindow, &place);
-    // GetWindowPlacement cti Taskbar, takze pokud je Taskbar nahore nebo vlevo,
-    // jsou hodnoty posunute o jeho rozmery. Provedeme korekci.
+    // GetWindowPlacement respects the Taskbar, so if the Taskbar is at the top or left,
+    // the values are shifted by its dimensions. Perform correction.
     RECT monitorRect;
     RECT workRect;
     MultiMonGetClipRectByRect(&place.rcNormalPosition, &workRect, &monitorRect);
     OffsetRect(&place.rcNormalPosition, workRect.left - monitorRect.left,
                workRect.top - monitorRect.top);
 
-    // pokud jsme volani napriklad z findu a hlavni okno je minimalizovane,
-    // nechceme minimalizovany viewer
+    // if called, for example, from find and the main window is minimized,
+    // we do not want a minimized viewer
     if (place.showCmd == SW_MINIMIZE || place.showCmd == SW_SHOWMINIMIZED ||
         place.showCmd == SW_SHOWMINNOACTIVE)
         place.showCmd = SW_SHOWNORMAL;
 
-    // najdeme spravny viewer a spustime ho
+    // find the correct viewer and launch it
     CViewerMasks* masks = (altView ? MainWindow->AltViewerMasks : MainWindow->ViewerMasks);
     CViewerMasksItem* viewer = NULL;
 
     if (handlerID != 0xFFFFFFFF)
     {
-        // pokusim se najit viewer s odpovidajicim HandlerID
+        // attempt to find a viewer with matching HandlerID
         int j;
         for (j = 0; viewer == NULL && j < 2; j++)
         {
@@ -1037,17 +1037,17 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
 
                     if (viewer != NULL && viewer->ViewerType != VIEWER_EXTERNAL &&
                         viewer->ViewerType != VIEWER_INTERNAL)
-                    { // jen plug-inove viewery
+                    { // plug-in viewers only
                         CPluginData* plugin = Plugins.Get(-viewer->ViewerType - 1);
                         if (plugin != NULL && plugin->SupportViewer)
                         {
                             if (!plugin->CanViewFile(name))
-                                continue; // zkusime najit dalsi viewer, tenhle to nebere
+                                continue; // try to find another viewer, this one won't do it
                         }
                         else
                             TRACE_E("Unexpected error (before CanViewFile) in (Alt)ViewerMasks (invalid ViewerType).");
                     }
-                    break; // vse OK, jdeme otevrit viewer
+                    break; // everything is fine, open the viewer
                 }
             }
             else
@@ -1060,7 +1060,7 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
         //    if (MakeFileAvailOfflineIfOneDriveOnWin81(parent, name))
         //    {
         if (addToHistory)
-            MainWindow->FileHistory->AddFile(fhitView, viewer->HandlerID, name); // pridame soubor do historie
+            MainWindow->FileHistory->AddFile(fhitView, viewer->HandlerID, name); // add file to history
 
         switch (viewer->ViewerType)
         {
@@ -1102,7 +1102,7 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
 
                 char cmdLine[2 * MAX_PATH];
                 lstrcpyn(cmdLine, expCommand, 2 * MAX_PATH);
-                AddDoubleQuotesIfNeeded(cmdLine, 2 * MAX_PATH); // CreateProcess chce mit jmeno s mezerama v uvozovkach (jinak zkousi ruzny varianty, viz help)
+                AddDoubleQuotesIfNeeded(cmdLine, 2 * MAX_PATH); // CreateProcess wants the name with spaces in quotes (otherwise it tries various variants, see help)
                 int len = (int)strlen(cmdLine);
                 int lArgs = (int)strlen(expArguments);
                 if (len + lArgs + 2 <= 2 * MAX_PATH)
@@ -1112,7 +1112,7 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
 
                     MainWindow->SetDefaultDirectories();
 
-                    if (expInitDir[0] == 0) // nemelo by se vubec stat
+                    if (expInitDir[0] == 0) // this should never happen
                     {
                         strcpy(expInitDir, name);
                         CutDirectory(expInitDir);
@@ -1154,8 +1154,8 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
                 Configuration.WindowPlacement.length != 0)
             {
                 place = Configuration.WindowPlacement;
-                // GetWindowPlacement cti Taskbar, takze pokud je Taskbar nahore nebo vlevo,
-                // jsou hodnoty posunute o jeho rozmery. Provedeme korekci.
+                // GetWindowPlacement respects the Taskbar, so if the Taskbar is at the top or left,
+                // the values are shifted by its dimensions. Perform correction.
                 RECT monitorRect2;
                 RECT workRect2;
                 MultiMonGetClipRectByRect(&place.rcNormalPosition, &workRect2, &monitorRect2);
@@ -1234,7 +1234,7 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
         return;
     }
 
-    // overime si jestli je soubor na pristupne ceste
+    // verify that the file is on an accessible path
     char path[MAX_PATH + 10];
     if (name == NULL)
     {
@@ -1255,7 +1255,7 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
 
     BOOL addToHistory = name != NULL && Is(ptDisk);
 
-    // pokud jde o view/edit z panelu, ziskame plne dlouhe jmeno
+    // if viewing/editing from the panel, obtain the full long name
     if (name == NULL)
     {
         int i = GetCaretIndex();
@@ -1281,8 +1281,8 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
                 }
                 else
                     strcpy(s, f->Name);
-                // zkusime jestli je jmeno souboru platne, pripadne zkusime jeste jeho DOS-jmeno
-                // (resi soubory dosazitelne jen pres Unicode nebo DOS-jmena)
+                // try whether the file name is valid, otherwise try its DOS name as well
+                // (handles files accessible only through Unicode or DOS names)
                 if (f->DosName != NULL && SalGetFileAttributes(path) == 0xffffffff)
                 {
                     DWORD err = GetLastError();
@@ -1291,7 +1291,7 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
                         if (strlen(f->DosName) + (s - path) < MAX_PATH)
                         {
                             strcpy(s, f->DosName);
-                            if (SalGetFileAttributes(path) == 0xffffffff) // stale chyba -> vracime se na long-name
+                            if (SalGetFileAttributes(path) == 0xffffffff) // still error -> revert to the long name
                             {
                                 if ((s - path) + f->NameLen < MAX_PATH)
                                     strcpy(s, f->Name);
@@ -1309,7 +1309,7 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
         }
     }
 
-    // ziskani plneho DOS jmena
+    // obtain the full DOS name
     char dosName[MAX_PATH];
     if (GetShortPathName(name, dosName, MAX_PATH) == 0)
     {
@@ -1317,7 +1317,7 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
         dosName[0] = 0;
     }
 
-    // najdeme jmeno souboru a zjistime jestli ma priponu - potrebne pro masky
+    // find the file name and check if it has an extension - needed for masks
     char* namePart = strrchr(name, '\\');
     if (namePart == NULL)
     {
@@ -1326,37 +1326,37 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
     }
     namePart++;
     char* tmpExt = strrchr(namePart, '.');
-    //if (tmpExt == NULL || tmpExt == namePart) tmpExt = namePart + lstrlen(namePart); // ".cvspass" neni pripona ...
+    //if (tmpExt == NULL || tmpExt == namePart) tmpExt = namePart + lstrlen(namePart); // ".cvspass" is not an extension...
     if (tmpExt == NULL)
-        tmpExt = namePart + lstrlen(namePart); // ".cvspass" ve Windows je pripona ...
+        tmpExt = namePart + lstrlen(namePart); // ".cvspass" is treated as an extension in Windows...
     else
         tmpExt++;
 
-    // pozice pro editory
+    // position for editors
     WINDOWPLACEMENT place;
     place.length = sizeof(WINDOWPLACEMENT);
     GetWindowPlacement(MainWindow->HWindow, &place);
-    // GetWindowPlacement cti Taskbar, takze pokud je Taskbar nahore nebo vlevo,
-    // jsou hodnoty posunute o jeho rozmery. Provedeme korekci.
+    // GetWindowPlacement respects the Taskbar, so if the Taskbar is at the top or left,
+    // the values are shifted by its dimensions. Perform correction.
     RECT monitorRect;
     RECT workRect;
     MultiMonGetClipRectByRect(&place.rcNormalPosition, &workRect, &monitorRect);
     OffsetRect(&place.rcNormalPosition, workRect.left - monitorRect.left,
                workRect.top - monitorRect.top);
-    // pokud jsme volani napriklad z findu a hlavni okno je minimalizovane,
-    // nechceme minimalizovany editor
+    // if called, for example, from find and the main window is minimized,
+    // we do not want a minimized editor
     if (place.showCmd == SW_MINIMIZE || place.showCmd == SW_SHOWMINIMIZED ||
         place.showCmd == SW_SHOWMINNOACTIVE)
         place.showCmd = SW_SHOWNORMAL;
 
-    // najdeme spravny editor a spustime ho
+    // find the correct editor and launch it
     CEditorMasks* masks = MainWindow->EditorMasks;
 
     CEditorMasksItem* editor = NULL;
 
     if (handlerID != 0xFFFFFFFF)
     {
-        // pokusim se najit editor s odpovidajicim HandlerID
+        // attempt to find an editor with matching HandlerID
         int i;
         for (i = 0; editor == NULL && i < masks->Count; i++)
         {
@@ -1387,7 +1387,7 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
     if (editor != NULL)
     {
         if (addToHistory)
-            MainWindow->FileHistory->AddFile(fhitEdit, editor->HandlerID, name); // pridame soubor do historie
+            MainWindow->FileHistory->AddFile(fhitEdit, editor->HandlerID, name); // add file to history
 
         char expCommand[MAX_PATH];
         char expArguments[MAX_PATH];
@@ -1425,7 +1425,7 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
 
             char cmdLine[2 * MAX_PATH];
             lstrcpyn(cmdLine, expCommand, 2 * MAX_PATH);
-            AddDoubleQuotesIfNeeded(cmdLine, 2 * MAX_PATH); // CreateProcess chce mit jmeno s mezerama v uvozovkach (jinak zkousi ruzny varianty, viz help)
+            AddDoubleQuotesIfNeeded(cmdLine, 2 * MAX_PATH); // CreateProcess wants the name with spaces in quotes (otherwise it tries various variants, see help)
             int len = (int)strlen(cmdLine);
             int lArgs = (int)strlen(expArguments);
             if (len + lArgs + 2 <= 2 * MAX_PATH)
@@ -1435,7 +1435,7 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
 
                 MainWindow->SetDefaultDirectories();
 
-                if (expInitDir[0] == 0) // nemelo by se vubec stat
+                if (expInitDir[0] == 0) // this should never happen
                 {
                     strcpy(expInitDir, name);
                     CutDirectory(expInitDir);
@@ -1474,9 +1474,9 @@ void CFilesWindow::EditFile(char* name, DWORD handlerID)
 void CFilesWindow::EditNewFile()
 {
     CALL_STACK_MESSAGE1("CFilesWindow::EditNewFile()");
-    BeginStopRefresh(); // cmuchal si da pohov
+    BeginStopRefresh(); // snooper takes a break
 
-    // obnova DefaultDir
+    // restore DefaultDir
     MainWindow->UpdateDefaultDir(TRUE);
 
     char path[MAX_PATH];
@@ -1493,25 +1493,25 @@ void CFilesWindow::EditNewFile()
     {
         CEditNewFileDialog dlg(HWindow, path, MAX_PATH, &subject, Configuration.EditNewHistory, EDITNEW_HISTORY_SIZE);
 
-        // Cast lidi chce zakladat vzdy .txt a vyhovuje jim, ze prepisi pouze priponu; cast lidi zaklada ruzne soubory a chteji prepisovat cely nazev,
-        // takze jsme ustoupili a zavedli pro Edit New File vlastni polozku v konfiguraci.
+        // Some users always create .txt and are satisfied with overwriting just the extension; others create various files and want to overwrite the whole name,
+        // so we compromised and introduced a dedicated option for Edit New File in the configuration.
         // ------------------
-        // pro EditNew nema "chytrej" vyber pouze nazvu smysl, protoze lidi meni i priponu, viz nase forum:
+        // For EditNew, the smart selection of only the name makes no sense because people also change the extension, see our forum:
         // https://forum.altap.cz/viewtopic.php?t=2655
         // -----------------
-        // Od Windows Vista MS zavedli velice zadanou vec: quick rename implicitne oznaci pouze nazev bez tecky a pripony
-        // stejny kod je zde ctyrikrat
+        // Since Windows Vista, Microsoft introduced a demanded feature: quick rename selects only the name without the dot and extension
+        // the same code appears here four times
         if (!Configuration.EditNewSelectAll)
         {
             int selectionEnd = -1;
             if (first)
             {
                 const char* dot = strrchr(path, '.');
-                if (dot != NULL && dot > path) // sice plati, ze ".cvspass" ve Windows je pripona, ale Explorer pro ".cvspass" oznacuje cele jmeno, tak to delame take
+                if (dot != NULL && dot > path) // although ".cvspass" is an extension in Windows, Explorer selects the entire name, so we do the same
                                                //      if (dot != NULL)
                     selectionEnd = (int)(dot - path);
                 dlg.SetSelectionEnd(selectionEnd);
-                first = FALSE; // po chybe jiz dostaneme plny nazev souboru, takze ho oznacime komplet
+                first = FALSE; // after an error we get the full file name, so we select it all
             }
         }
 
@@ -1519,10 +1519,10 @@ void CFilesWindow::EditNewFile()
         {
             UpdateWindow(MainWindow->HWindow);
 
-            // ocistime jmeno od nezadoucich znaku na zacatku a konci,
-            // delame to jen u posledni komponenty, predesle bud jiz existuji a je to fuk (poresi si
-            // to system) nebo se pri vytvareni okontroluji a pripadne se zarve chyba (jen nedojde
-            // k ocisteni z nasi strany, at se user taky snazi, je to podprahovka)
+            // clean the name from undesirable characters at the beginning and end
+            // we do this only for the last component; the previous ones already exist and it doesn't matter 
+            // (the system handles it) or they are checked during creation and an error is shown 
+            // (we don't clean them, we let the user do some work, it's easy enough)
             char* lastCompName = strrchr(path, '\\');
             MakeValidFileName(lastCompName != NULL ? lastCompName + 1 : path);
 
@@ -1530,14 +1530,14 @@ void CFilesWindow::EditNewFile()
             int errTextID;
             //      if (SalGetFullName(path, &errTextID, MainWindow->GetActivePanel()->Is(ptDisk) ?
             //                         MainWindow->GetActivePanel()->GetPath() : NULL, NextFocusName))
-            if (SalGetFullName(path, &errTextID, Is(ptDisk) ? GetPath() : NULL, NextFocusName)) // kvuli konzistenci s ChangePathToDisk()
+            if (SalGetFullName(path, &errTextID, Is(ptDisk) ? GetPath() : NULL, NextFocusName)) // for consistency with ChangePathToDisk()
             {
                 char checkPath[MAX_PATH];
                 strcpy(checkPath, path);
                 CutDirectory(checkPath);
                 if (CheckPath(TRUE, checkPath) != ERROR_SUCCESS)
                 {
-                    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+                    EndStopRefresh(); // snooper will start again now
                     return;
                 }
 
@@ -1568,7 +1568,7 @@ void CFilesWindow::EditNewFile()
 
                     EditFile(path);
 
-                    // zmena jen v adresari, ve kterem se vytvoril soubor
+                    // change only in the directory where the file was created
                     MainWindow->PostChangeOnPathNotification(checkPath, FALSE);
 
                     break;
@@ -1584,18 +1584,18 @@ void CFilesWindow::EditNewFile()
         else
             break;
     }
-    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+    EndStopRefresh(); // snooper will start again now
 }
 
-// na zaklade dostupnych vieweru naplni popup
+// fills the popup based on available viewers
 void CFilesWindow::FillViewWithMenu(CMenuPopup* popup)
 {
     CALL_STACK_MESSAGE1("CFilesWindow::FillViewWithMenu()");
 
-    // sestrelime existujici polozky
+    // remove existing items
     popup->RemoveAllItems();
 
-    // vytahnu seznam indexu vieweru
+    // retrieve the list of viewer indexes
     TDirectArray<CViewerMasksItem*> items(50, 10);
     if (!FillViewWithData(&items))
         return;
@@ -1613,7 +1613,7 @@ void CFilesWindow::FillViewWithMenu(CMenuPopup* popup)
             int pluginIndex = -item->ViewerType - 1;
             CPluginData* plugin = Plugins.Get(pluginIndex);
             lstrcpy(buff, plugin->Name);
-            if (plugin->PluginIconIndex != -1) // plugin ma ikonku
+            if (plugin->PluginIconIndex != -1) // the plugin has an icon
                 imgIndex = pluginIndex;
         }
         if (item->ViewerType == VIEWER_EXTERNAL)
@@ -1647,7 +1647,7 @@ void CFilesWindow::FillViewWithMenu(CMenuPopup* popup)
 
 BOOL CFilesWindow::FillViewWithData(TDirectArray<CViewerMasksItem*>* items)
 {
-    // merge probehne pres normalni i alternate viewers
+    // merging proceeds through normal and alternate viewers
     int type;
     for (type = 0; type < 2; type++)
     {
@@ -1662,7 +1662,7 @@ BOOL CFilesWindow::FillViewWithData(TDirectArray<CViewerMasksItem*>* items)
         {
             CViewerMasksItem* item = masks->At(i);
 
-            BOOL alreadyAdded = FALSE; // nechceme v seznamu jednu polozku vicekrat
+            BOOL alreadyAdded = FALSE; // we do not want the item listed more than once
 
             int j;
             for (j = 0; j < items->Count; j++)
@@ -1705,27 +1705,27 @@ BOOL CFilesWindow::FillViewWithData(TDirectArray<CViewerMasksItem*>* items)
 
 void CFilesWindow::OnViewFileWith(int index)
 {
-    BeginStopRefresh(); // cmuchal si da pohov
+    BeginStopRefresh(); // snooper takes a break
 
-    // vytahnu seznam indexu vieweru
+    // get the list of viewer indexes
     TDirectArray<CViewerMasksItem*> items(50, 10);
     if (!FillViewWithData(&items))
     {
-        EndStopRefresh(); // ted uz zase cmuchal nastartuje
+        EndStopRefresh(); // snooper will start again now
         return;
     }
 
     if (index < 0 || index >= items.Count)
     {
         TRACE_E("index=" << index);
-        EndStopRefresh(); // ted uz zase cmuchal nastartuje
+        EndStopRefresh(); // snooper will start again now
         return;
     }
 
     ViewFile(NULL, FALSE, items[index]->HandlerID, Is(ptDisk) ? EnumFileNamesSourceUID : -1,
-             -1 /* index podle fokusu */);
+             -1 /* index determined by focus */);
 
-    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+    EndStopRefresh(); // snooper will start again now
 }
 
 void CFilesWindow::ViewFileWith(char* name, HWND hMenuParent, const POINT* menuPoint, DWORD* handlerID,
@@ -1734,7 +1734,7 @@ void CFilesWindow::ViewFileWith(char* name, HWND hMenuParent, const POINT* menuP
     CALL_STACK_MESSAGE5("CFilesWindow::ViewFileWith(%s, , , %s, %d, %d)", name,
                         (handlerID == NULL ? "NULL" : "non-NULL"), enumFileNamesSourceUID,
                         enumFileNamesLastFileIndex);
-    BeginStopRefresh(); // cmuchal si da pohov
+    BeginStopRefresh(); // snooper takes a break
     if (handlerID != NULL)
         *handlerID = 0xFFFFFFFF;
 
@@ -1744,11 +1744,11 @@ void CFilesWindow::ViewFileWith(char* name, HWND hMenuParent, const POINT* menuP
                                    menuPoint->x, menuPoint->y, hMenuParent, NULL);
     if (cmd >= CM_VIEWWITH_MIN && cmd <= CM_VIEWWITH_MAX)
     {
-        // vytahnu seznam indexu vieweru
+        // get the list of viewer indexes
         TDirectArray<CViewerMasksItem*> items(50, 10);
         if (!FillViewWithData(&items))
         {
-            EndStopRefresh(); // ted uz zase cmuchal nastartuje
+            EndStopRefresh(); // snooper will start again now
             return;
         }
 
@@ -1759,17 +1759,17 @@ void CFilesWindow::ViewFileWith(char* name, HWND hMenuParent, const POINT* menuP
             *handlerID = items[index]->HandlerID;
     }
 
-    EndStopRefresh(); // ted uz zase cmuchal nastartuje
+    EndStopRefresh(); // snooper will start again now
 }
 
 void CFilesWindow::FillEditWithMenu(CMenuPopup* popup)
 {
     CALL_STACK_MESSAGE1("CFilesWindow::FillEditWithMenu()");
 
-    // sestrelime existujici polozky
+    // remove existing items
     popup->RemoveAllItems();
 
-    // vytahnu seznam indexu editoru
+    // retrieve the list of editor indexes
     CEditorMasks* masks = MainWindow->EditorMasks;
 
     MENU_ITEM_INFO mii;
@@ -1790,8 +1790,8 @@ void CFilesWindow::FillEditWithMenu(CMenuPopup* popup)
 
         CEditorMasksItem* item = masks->At(i);
 
-        // pokud maji uzivatele vic radku masek asociovanych s jednim viewerem/editorem,
-        // zaradime polozku do seznamu pouze jednou
+        // if users have multiple rows of masks associated with one viewer/editor,
+        // insert the item into the list only once
         BOOL alreadyAdded = FALSE;
         int j;
         for (j = 0; j < i; j++)
