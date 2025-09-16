@@ -2768,18 +2768,18 @@ BOOL CFilesWindow::HandeQuickRenameWindowKey(WPARAM wParam)
     BOOL mayChange = FALSE;
     if (Is(ptDisk))
     {
-        // Pokud jde o in-place rename a uzivatel nazev nezmenil, nemeli bychom se
-        // pokouset o prejmenovani, protoze uzivatel muze byt na CD-ROM nebo jinem R/O disku
-        // a my potom zobrazovali chybovou hlasku Access is denied. Uzivatel pritom nema
-        // mysi moznost operaci Escapnout, takze musi sahnout na Escape klavesu.
-        // Explorer se chova presne timto novym zpusobem.
+        // If this is an in-place rename and the user didn't change the name, we shouldn't
+        // attempt to rename it because the user might be on a CD-ROM or other read-only disk
+        // and we would display the "Access is denied" error. The user has no mouse option
+        // to cancel the operation, so they would have to press Escape. 
+        // Explorer behaves this way now.
         if (strcmp(f->Name, newName) != 0)
             RenameFileInternal(f, newName, &mayChange, &tryAgain);
     }
     else if (Is(ptPluginFS) && GetPluginFS()->NotEmpty() &&
-             GetPluginFS()->IsServiceSupported(FS_SERVICE_QUICKRENAME)) // v panelu je FS
+             GetPluginFS()->IsServiceSupported(FS_SERVICE_QUICKRENAME)) // FS is in the panel
     {
-        // otevreme standardni dialog
+        // open the standard dialog
         BOOL cancel;
         BOOL ret = GetPluginFS()->QuickRename(GetPluginFS()->GetPluginFSName(), 2, HWindow, *f, isDir, newName, cancel);
         if (!ret && !cancel)
@@ -2789,20 +2789,20 @@ BOOL CFilesWindow::HandeQuickRenameWindowKey(WPARAM wParam)
         }
         else
         {
-            if (ret && !cancel) // uspesne dokoncena operace
+            if (ret && !cancel) // operation completed successfully
             {
-                strcpy(NextFocusName, newName); // zajistime fokus noveho jmena po refreshi
+                strcpy(NextFocusName, newName); // ensure focus of the new name after refresh
             }
         }
     }
 
-    // opet zvysime prioritu threadu, operace dobehla
+    // raise the thread priority again, the operation has finished
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-    // refresh neautomaticky refreshovanych adresaru
+    // refresh of manually refreshed directories
     if (mayChange)
     {
-        // zmena v adresari zobrazenem v panelu a pokud se prejmenovaval adresar, tak i v podadresarich
+        // change in the directory shown in the panel and if a directory was renamed, then also in subdirectories
         MainWindow->PostChangeOnPathNotification(GetPath(), isDir);
     }
 
@@ -2870,7 +2870,7 @@ CQuickRenameWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         if (SkipNextCharacter)
         {
-            SkipNextCharacter = FALSE; // zamezime pipnuti
+            SkipNextCharacter = FALSE; // prevent a beep
             return FALSE;
         }
 
@@ -2886,7 +2886,7 @@ CQuickRenameWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         if (wParam == 'A')
         {
-            // od Windows Vista uz SelectAll standardne funguje, takze tam nechame select all na nich
+            // since Windows Vista, SelectAll works by default, so we leave select-all to them
             if (!WindowsVistaAndLater)
             {
                 BOOL controlPressed = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -2895,7 +2895,7 @@ CQuickRenameWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 if (controlPressed && !shiftPressed && !altPressed)
                 {
                     SendMessage(HWindow, EM_SETSEL, 0, -1);
-                    SkipNextCharacter = TRUE; // zamezime pipnuti
+                    SkipNextCharacter = TRUE; // prevent a beep
                     return 0;
                 }
             }
