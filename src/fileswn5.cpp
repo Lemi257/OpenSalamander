@@ -606,8 +606,8 @@ void CFilesWindow::ChangeAttr(BOOL setCompress, BOOL compressed, BOOL setEncrypt
                     }
                     else // removal of selection index (no waiting for operation finish, operation runs in another thread)
                     {
-                        SetSel(FALSE, -1, TRUE);                    // explicit repaint
-                    PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // selection change notify
+                        SetSel(FALSE, -1, TRUE);                        // explicit repaint
+                        PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // selection change notify
                         UpdateWindow(MainWindow->HWindow);
                     }
                 }
