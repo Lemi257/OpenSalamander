@@ -164,103 +164,103 @@ BOOL IsNetworkPath(const char* path);
 // certain the FS does not support ADS
 BOOL IsPathOnVolumeSupADS(const char* path, BOOL* isFAT32);
 
-// test jestli jde o Sambu (Linuxova podpora sdileni disku s Windows)
+// test whether this is Samba (Linux support for disk sharing with Windows)
 BOOL IsSambaDrivePath(const char* path);
 
-// test jestli jde o UNC cestu (detekuje oba formaty: \\server\share i \\?\UNC\server\share)
+// test whether the path is UNC (detects both \\server\share and \\?\UNC\server\share formats)
 BOOL IsUNCPath(const char* path);
 
-// test jestli jde o UNC root (detekuje jen format: \\server\share)
+// test whether it is UNC root (only detects the \\server\share format)
 BOOL IsUNCRootPath(const char* path);
 
-// vytvoreni souboru se jmenem 'fileName' pres klasicke volani Win32 API
-// CreateFile (lpSecurityAttributes==NULL, dwCreationDisposition==CREATE_NEW,
-// hTemplateFile==NULL); tato metoda resi kolizi 'fileName' s dosovym nazvem
-// jiz existujiciho souboru/adresare (jen pokud nejde i o kolizi s dlouhym
-// jmenem souboru/adresare) - zajisti zmenu dosoveho jmena tak, aby se soubor se
-// jmenem 'fileName' mohl vytvorit (zpusob: docasne prejmenuje konfliktni
-// soubor/adresar na jine jmeno a po vytvoreni 'fileName' ho prejmenuje zpet);
-// vraci handle souboru nebo pri chybe INVALID_HANDLE_VALUE (chyba je v GetLastError());
-// neni-li 'encryptionNotSupported' NULL a soubor nejde otevrit s Encrypted
-// atributem, zkusi ho otevrit jeste bez Encrypted atributu, pokud se to povede,
-// soubor je smazan a do 'encryptionNotSupported' se zapise TRUE - navratova hodnota
-// funkce a GetLastError() obsahuji "puvodni" chybu (otevirani s Encrypted atributem)
+// creates a file named 'fileName' using the standard Win32 API CreateFile
+// (lpSecurityAttributes==NULL, dwCreationDisposition==CREATE_NEW, hTemplateFile==NULL);
+// this method handles collisions between 'fileName' and DOS name of an already 
+// existing file/directory (only when it is not also a long-name collision)
+// - ensures DOS name change so the file with the name 'fileName' 
+// can be created (by temporarily renaming the conflicting file/directory
+// and renaming it back after creating 'fileName')
+// returns a file handle or INVALID_HANDLE_VALUE on error (error in GetLastError()).
+// if 'encryptionNotSupported' is not NULL and the file cannot be opened with the
+// Encrypted attribute, it tries again without the Encrypted attribute, if successful
+// the file is deleted and 'encryptionNotSupported' is set to TRUE - the function's
+// return value and GetLastError() contain the original error (opening with the Encrypted attribute)
 HANDLE SalCreateFileEx(const char* fileName, DWORD desiredAccess,
                        DWORD shareMode, DWORD flagsAndAttributes,
                        BOOL* encryptionNotSupported);
 
-// zkontroluje posledni komponentu jmena v ceste 'path', pokud obsahuje na
-// zacatku nebo na konci mezeru nebo na konci tecku, vraci TRUE, jinak FALSE
+// checks the last component of the name in 'path', if it starts or ends with a
+// space or ends with a dot the function returns TRUE; otherwise FALSE
 BOOL FileNameInvalidForManualCreate(const char* path);
 
-// oriznuti mezer na zacatku a na konci jmena (CutWS nebo StripWS nebo CutWhiteSpace nebo StripWhiteSpace)
-// vraci TRUE pokud doslo k orezu
+// removes spaces from the beginning and end of the name (using CutWS / StripWS / CutWhiteSpace / StripWhiteSpace)
+// returns TRUE if trimming occurred
 BOOL CutSpacesFromBothSides(char* path);
 
-// oriznuti mezer na zacatku a mezer a tecek na konci jmena, dela to tak Explorer
-// a lidi tlacili, ze to tak taky chteji, viz https://forum.altap.cz/viewtopic.php?f=16&t=5891
-// a https://forum.altap.cz/viewtopic.php?f=2&t=4210
-// vraci TRUE pokud se zmeni obsah 'path'
+// trims leading spaces and trailing spaces or dots, the same as Explorer does
+// because users requested this behavior, see https://forum.altap.cz/viewtopic.php?f=16&t=5891
+// and https://forum.altap.cz/viewtopic.php?f=2&t=4210
+// returns TRUE if 'path' content was modified
 BOOL MakeValidFileName(char* path);
 
-// pokud 'name' konci na mezeru/tecku, udela se kopie 'name' do 'nameCopy' a doplni
-// se na konec '\\', pak se 'name' nasmeruje do 'nameCopy'; bezne API funkce
-// orezavaji tise mezery/tecky z konce cesty a pracuji pak s jinymi soubory/adresari
-// nez chceme, pridany '\\' na konci to resi
+// if 'name' ends with a space or dot a copy of 'name' is made to 'nameCopy' and
+// a '\\' is appended; 'name' is then redirected to 'nameCopy'; standard API
+// functions silently trim trailing spaces or dots and operate on other
+// files/directories than intended; adding '\\' at the end fixes that
 void MakeCopyWithBackslashIfNeeded(const char*& name, char (&nameCopy)[3 * MAX_PATH]);
 
-// vraci TRUE pokud jmeno konci na backslash ('\\' pridany na konci resi invalidni jmena)
+// returns TRUE if the name ends with a backslash (the appended '\\' fixes invalid names)
 BOOL NameEndsWithBackslash(const char* name);
 
-// pokud 'name' konci na mezeru/tecku nebo obsahuje ':' (kolize s ADS), vraci TRUE, jinak FALSE,
-// je-li 'ignInvalidName' TRUE, vraci TRUE jen pokud 'name' obsahuje ':' (kolize s ADS)
+// returns TRUE if 'name' ends with a space/dot or contains ':' (ADS conflict), otherwise FALSE,
+// when 'ignInvalidName' TRUE, returns TRUE only if 'name' contains ':' (ADS conflict)
 BOOL FileNameIsInvalid(const char* name, BOOL isFullName, BOOL ignInvalidName = FALSE);
 
-// vraci FALSE, pokud obsazene komponenty cesty konci na mezeru/tecku
-// a je-li 'cutPath' TRUE, zaroven cestu zkrati k prvni invalidni komponente
-// (pro chybove hlaseni), jinak vraci TRUE
+// Returns FALSE if any component of the path ends with a space or dot
+// when 'cutPath' is TRUE, the path is shortened to the first invalid component 
+// (for an error message), otherwise returns TRUE
 BOOL PathContainsValidComponents(char* path, BOOL cutPath);
 
-// vytvoreni adresare se jmenem 'name' pres klasicke volani Win32 API
-// CreateDirectory(lpSecurityAttributes==NULL); tato metoda resi kolizi 'name'
-// s dosovym nazvem jiz existujiciho souboru/adresare (jen pokud nejde i o
-// kolizi s dlouhym jmenem souboru/adresare) - zajisti zmenu dosoveho jmena
-// tak, aby se adresar se jmenem 'name' mohl vytvorit (zpusob: docasne prejmenuje
-// konfliktni soubor/adresar na jine jmeno a po vytvoreni 'name' ho
-// prejmenuje zpet); dale resi jmena koncici na mezery (umi je vytvorit, narozdil
-// od CreateDirectory, ktera mezery bez varovani orizne a vytvori tak vlastne
-// jiny adresar); vraci TRUE pri uspechu, pri chybe FALSE (vraci v 'err'
-// (neni-li NULL) kod Windows chyby)
+// creates a directory called 'name' using the standard Win 32 API 
+// CreateDirectory(lpSecurityAttributes==NULL); the function resolves collision of 'name'
+// with a DOS name of an already existing file/directory (only when 
+// it is not also a long-name collision) - ensures DOS name change 
+// so the directory with the name 'name' can be created (by temporarily renaming 
+// the conflicting file/directory and renaming it back after creating 'name')
+// it also deals with names ending with spaces (can create them, unlike 
+// CreateDirectory which would just trim the spaces without warning and create 
+// a different directory like that); returns TRUE on success, FALSE on failure
+// ('err' (if not NULL) receives the Windows error code)
 BOOL SalCreateDirectoryEx(const char* name, DWORD* err);
 
-void InitLocales();                                       // nutne volat pres pouzitim NumberToStr a PrintDiskSize
-char* NumberToStr(char* buffer, const CQuadWord& number); // prevod int -> prehlednejsi string, !char buffer[50]!
-int NumberToStr2(char* buffer, const CQuadWord& number);  // prevod int -> prehlednejsi string, !char buffer[50]!, vraci pocet znaku nakopirovanych do bufferu
-char* GetErrorText(DWORD error);                          // prevadi cislo chyby na string
-WCHAR* GetErrorTextW(DWORD error);                        // prevadi cislo chyby na string
-BOOL IsDirError(DWORD err);                               // tyka se chyba prace s adresari ?
+void InitLocales();                                       // must be called before using NumberToStr and PrintDiskSize
+char* NumberToStr(char* buffer, const CQuadWord& number); // converts integer -> a more readable string, !char buffer[50]!
+int NumberToStr2(char* buffer, const CQuadWord& number);  // converts integer -> a more readable string, !char buffer[50]!, returns number of characters copied to the buffer
+char* GetErrorText(DWORD error);                          // converts error code to a string
+WCHAR* GetErrorTextW(DWORD error);                        // converts error code to a string
+BOOL IsDirError(DWORD err);                               // does the error relate to workng with directories?
 
-// normal i UNC cesty: maji stejny root?
+// regular and UNC paths: do they share the same root?
 BOOL HasTheSameRootPath(const char* path1, const char* path2);
 
-// zjisti, jestli maji obe cesty stejny root a jsou z jednoho svazku (resi
-// cesty obsahujici reparse pointy a substy)
-// POZOR: jde o dost POMALOU funkci (az 200ms)
+// check whether both paths have the same root and lie on the same volume
+// (handles paths containing reparse points and SUBST drives)
+// WARNING: this function can be quite slow (up to 200 ms)
 BOOL HasTheSameRootPathAndVolume(const char* p1, const char* p2);
 
-// vraci TRUE, pokud jsou cesty 'path1' a 'path2' ze stejneho svazku; v 'resIsOnlyEstimation'
-// (neni-li NULL) vraci TRUE, pokud neni vysledek jisty (jisty je jen v pripade, ze se
-// podarilo ziskat "volume name" (GUID) u obou cest, coz pripada v uvahu jen pro lokalni
-// cesty pod W2K nebo novejsimi z rady NT)
-// POZOR: jde o dost POMALOU funkci (az 200ms)
+// returns TRUE if 'path1' and 'path2' are from the same volume; in 'resIsOnlyEstimation'
+// (if not NULL) returns TRUE, when the result is only an estimation (certain only
+// when the "volume name" (GUID) could be obtained for both paths, which is possible
+// only for local paths under W2K or newer)
+// WARNING: this function can be quite slow (up to 200 ms)
 BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOnlyEstimation);
 
-// porovna dve cesty: ignore-case, ignoruje take jeden backslash na zacatku a konci cest
+// compares two paths: case-insensitive and ignoring a single backslash at the start and end
 BOOL IsTheSamePath(const char* path1, const char* path2);
 
-// zjisti, jestli je cesta typu plugin FS, 'path' je zjistovana cesta, 'fsName' je
-// buffer MAX_PATH znaku pro jmeno FS (nebo NULL), vraci 'userPart' (je-li != NULL) - ukazatel
-// do 'path' na prvni znak pluginem definovane cesty (za prvni ':')
+// determine whether the path is a plugin FS path, 'path' is the path to check, 'fsName' is 
+// a MAX_PATH buffer for the FS name (or NULL), returns 'userPart' (if != NULL) - pointer
+// to 'path' at the first character of the plugin-defined path (after the first ':')
 BOOL IsPluginFSPath(const char* path, char* fsName = NULL, const char** userPart = NULL);
 BOOL IsPluginFSPath(char* path, char* fsName = NULL, char** userPart = NULL);
 
