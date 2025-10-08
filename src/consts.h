@@ -3,62 +3,62 @@
 
 #pragma once
 
-// aktualni verze konfigurace (popis viz. mainwnd2.cpp)
+// current configuration version (see mainwnd2.cpp for details)
 extern const DWORD THIS_CONFIG_VERSION;
 
-// Expirace verze: pro beta a PB verze odkomentovat, pro ostre verze zakomentovat:
+// Version expiration: uncomment for beta and PB builds, comment out for release builds:
 //#define USE_BETA_EXPIRATION_DATE
 
-// pro PB (EAP) verze odkomentovat, pro ostatni verze zakomentovat:
+// For PB (EAP) builds uncomment, for other builds comment out:
 //#define THIS_IS_EAP_VERSION
 
 #ifdef USE_BETA_EXPIRATION_DATE
 
-// urcuje prvni den, kdy uz tato beta verze nepobezi
+// specifies the first day when this beta build will no longer run
 extern SYSTEMTIME BETA_EXPIRATION_DATE;
 
 #endif // USE_BETA_EXPIRATION_DATE
 
-// jen pro DEBUG verzi Salama: umozni debugovat tvorbu bugreportu (defaultne se nedela,
-// exceptiona se jen preda MSVC debuggeru)
+// DEBUG build only: allows debugging bug report creation (normally no report is built,
+// the exception is simply passed to the MSVC debugger)
 //#define ENABLE_BUGREPORT_DEBUGGING   1
 
-// slouzi pro detekci, zda wheel message prisla pres hook nebo primo
-extern BOOL MouseWheelMSGThroughHook; // TRUE: zprava sla skrz hook v case MouseWheelMSGTime; FALSE: zprava sla skrz panel v case MouseWheelMSGTime
-extern DWORD MouseWheelMSGTime;       // casove razitko pri posledni zprave
-#define MOUSEWHEELMSG_VALID 100       // [ms] pocet milisekund, po ktere je validni jeden kanal (hook vs okno)
+// used to detect whether the wheel message came through the hook or directly
+extern BOOL MouseWheelMSGThroughHook; // TRUE: the message went through the hook at MouseWheelMSGTime; FALSE: it went through the panel at MouseWheelMSGTime
+extern DWORD MouseWheelMSGTime;       // timestamp of the last wheel message
+#define MOUSEWHEELMSG_VALID 100       // [ms] number of milliseconds one channel is valid (hook vs. window)
 
 enum
 {
     otViewerWindow = 10,
 };
 
-// podpora pro horizontalni scroll (funguje jiz na W2K/XP s Intellipoint ovladacema, oficialne podporeno od Visty)
+// horizontal scroll support (works on W2K/XP with Intellipoint drivers, officially supported since Vista)
 #define WM_MOUSEHWHEEL 0x020E
 BOOL PostMouseWheelMessage(MSG* pMSG);
 
-// zjisti jestli je velka sance (jiste se to urcit neda), ze Salamander v pristich par
-// okamzicich nebude "busy" (nebude otevreny zadny modalni dialog a nebude se zpracovavat
-// zadna zprava) - v tomto pripade vraci TRUE (jinak FALSE); neni-li 'lastIdleTime' NULL,
-// vraci se v nem GetTickCount() z okamziku posledniho prechodu z "idle" do "busy" stavu
-// je mozne volat z libovolneho threadu
+// checks if it is very likely (though not guaranteed) that Salamander will not be "busy" 
+// in the next few moments (no modal dialog will be open and no message being processed)
+//  - in such case returns TRUE (otherwise FALSE); if 'lastIdleTime' is not NULL,
+// it receives GetTickCount() from the last idle to busy transition.
+// can be called from any thread.
 BOOL SalamanderIsNotBusy(DWORD* lastIdleTime);
 
-// otevre HTML help Salamandera nebo pluginu, jazyk helpu (adresar s .chm soubory) vybira takto:
-// -adresar ziskany z aktualniho .slg souboru Salamandera (viz SLGHelpDir v shared\versinfo.rc)
-// -HELP\ENGLISH\*.chm
-// -prvni nalezeny podadresar v podadresari HELP
-// 'helpFileName' je jmeno .chm souboru, se kterym se ma pracovat (jmeno je bez cesty), je-li NULL,
-// jde o "salamand.chm"; 'parent' je parent messageboxu s chybou; 'command' je prikaz HTML helpu,
-// viz HHCDisplayXXX; 'dwData' je parametr prikazu HTML helpu, viz HHCDisplayXXX
-// je mozne volat z libovolneho threadu
-// Pokud je 'quiet' TRUE, nezobrazi se chybova hlaska.
-// Vraci TRUE, pokud se help podarilo otevrite, jinak vraci FALSE;
+// opens Salamander or plugin HTML help, the help language (directory with .chm files) is selected as follows:
+// - directory from the current Salamander .slg file (see SLGHelpDir in shared\versinfo.rc)
+// - HELP\ENGLISH\*.chm
+// - first subdirectory found in the subdirectory HELP
+// 'helpFileName' is the name of the .chm file to use (name is without path); if NULL, "salamand.chm" is used.
+// 'parent' is the parent of the error message box; 'command' is the HTML help command 
+// see HHCDisplayXXX; 'dwData' is the parameter of the HTML help command, see HHCDisplayXXX 
+// can be called from any thread
+// If 'quiet' is TRUE, no error message is shown.
+// Returns TRUE if the help was opened successfully, otherwise FALSE.
 BOOL OpenHtmlHelp(char* helpFileName, HWND parent, CHtmlHelpCommand command, DWORD_PTR dwData, BOOL quiet);
 
-extern CRITICAL_SECTION OpenHtmlHelpCS; // kriticka sekce pro OpenHtmlHelp()
+extern CRITICAL_SECTION OpenHtmlHelpCS; // critical section for OpenHtmlHelp()
 
-/* jednoduche zajisteni behu v kriticke sekci, priklad pouziti:
+/* simple way to run inside a critical section, example usage:
   static CCriticalSection cs;
   CEnterCriticalSection enterCS(cs);
 */
@@ -93,75 +93,75 @@ public:
     }
 };
 
-// protoze windowsova GetTempFileName nefunguje, napsali jsme si vlastniho klona:
-// vytvori soubor/adresar (podle 'file') na ceste 'path' (NULL -> Window TEMP dir),
-// s prefixem 'prefix', vraci jmeno vytvoreneho souboru v 'tmpName' (min. velikost MAX_PATH),
-// vraci "uspech?" (pri neuspechu vraci pres SetLastError kod Windows chyby - pro kompatib.)
+// Windows GetTempFileName does not work for us, so we wrote our own clone:
+// creates a file/directory (depending on 'file') at path 'path' (NULL -> Windows TEMP dir),
+// with prefix 'prefix', returns the name of created file in 'tmpName' (at least MAX_PATH in size),
+// Returns success status (on failure SetLastError contains the Windows error code for compatibility)
 BOOL SalGetTempFileName(const char* path, const char* prefix, char* tmpName, BOOL file);
 
-// protoze windowsova verze MoveFile nezvlada prejmenovani souboru s read-only atributem na Novellu,
-// napsali jsme si vlastni (nastane-li chyba pri MoveFile, zkusi shodit read-only, provest operaci,
-// a pak ho zase nahodit)
+// because Windows MoveFile cannot rename a file with the read-only attribute on Novell,
+// we have our own version (on failure we drop the read-only flag, perform the operation,
+// then restore it)
 BOOL SalMoveFile(const char* srcName, const char* destName);
 
-// varianta k windowsove verzi GetFileSize (ma jednodussi osetreni chyb); 'file' je otevreny
-// soubor pro volani GetFileSize(); v 'size' vraci ziskanou velikost souboru; vraci uspech,
-// pri FALSE (chyba) je v 'err' windowsovy kod chyby a v 'size' nula
+// replacement for Windows GetFileSize (with simpler error handling); 'file' is an open
+// file for calling GetFileSize(); the result is stored in 'size'; returns success, 
+// on FALSE 'err' receives the Windows error code and 'size' is zero
 BOOL SalGetFileSize(HANDLE file, CQuadWord& size, DWORD& err);
-BOOL SalGetFileSize2(const char* fileName, CQuadWord& size, DWORD* err); // 'err' muze byt NULL pokud nas nezajima
+BOOL SalGetFileSize2(const char* fileName, CQuadWord& size, DWORD* err); // 'err' may be NULL if we don't care
 
 struct COperation;
 
-// zjisti velikost souboru, na ktery vede symlink 'fileName'; je-li 'op' ruzne od NULL,
-// pri cancelu se vnitrek 'op' uvolni; je-li 'fileName' NULL, bere se 'op->SourceName';
-// velikost vraci v 'size'; 'ignoreAll' je in + out, je-li TRUE vsechny chyby se ignoruji
-// (pred akci je treba priradit FALSE, jinak se okno s chybou vubec nezobrazi, pak uz
-// nemenit); pri chybe zobrazi standardni okno s dotazem Retry / Ignore / Ignore All / Cancel
-// s parentem 'parent'; pokud velikost uspesne zjisti, vraci TRUE; pri chybe a stisku
-// tlacitka Ignore / Igore All v okne s chybou, vraci FALSE a v 'cancel' vraci FALSE;
-// je-li 'ignoreAll' TRUE, okno se neukaze, na tlacitko se neceka, chova se jako by
-// uzivatel stiskl Ignore; pri chybe a stisku Cancel v okne s chybou vraci FALSE a
-// v 'cancel' vraci TRUE
+// finds the size of the file pointed to by the symlink 'fileName'; if 'op' is not NULL,
+// when canceled the content of 'op' is released; if 'fileName' is NULL, 'op->SourceName' is used
+// the size is returned in 'size'; 'ignoreAll' works as both input and output; if TRUE ignore all errors
+// (set it to FALSE before the call or the error dialog will never appear, do not change after)
+// on error the standard Retry/Ignore/Ignore All/Cancel dialog with the parent
+// window 'parent' is shown; if it finds the size successfully it returns TRUE; when on error and 
+// Ignore or Ignore All pressed the function returns FALSE and 'cancel' receives FALSE;
+// if 'ignoreAll' is TRUE the dialog is not shown, the button is skipped, and it behaves as if 
+// the user had clicked Ignore; when Cancel is pressed the function returns FALSE 
+// and 'cancel' receives TRUE
 BOOL GetLinkTgtFileSize(HWND parent, const char* fileName, COperation* op, CQuadWord* size,
                         BOOL* cancel, BOOL* ignoreAll);
 
-// protoze windowsova verze GetFileAttributes neumi pracovat se jmeny koncicimi mezerou/teckou,
-// napsali jsme si vlastni (u techto jmen pridava backslash na konec, cimz uz pak
-// GetFileAttributes funguje spravne, ovsem jen pro adresare, pro soubory s mezerou/teckou na
-// konci reseni nemame, ale aspon se to nezjistuje od jineho souboru - windowsova verze
-// orizne mezery/tecky a pracuje tak s jinym souborem/adresarem)
+// because Windows GetFileAttributes cannot handle names ending with a space or dot, 
+// we created our own version (for such names it appends a backslash which ensures 
+// GetFileAttributes works correctly, but only for directories, files with trailing 
+// spaces/dots remain problematic, but at least we avoid reading attributes of another file
+// - the Windows version trims spaces/dots and operates with different file/directory)
 DWORD SalGetFileAttributes(const char* fileName);
 
-// pokud ma soubor/adresar 'name' read-only atribut, pokusime se ho vypnout
-// (duvod: napr. aby sel smazat pres DeleteFile); pokud uz mame atributy 'name'
-// nactene, predame je v 'attr', je-li 'attr' -1, ctou se atributy 'name' z disku;
-// vraci TRUE pokud se provede pokus o zmenu atributu (uspech se nekontroluje)
-// POZNAMKA: vypina jen read-only atribut, aby v pripade vice hardlinku nedoslo
-// k zbytecne velke zmene atributu na zbyvajicich hardlinkach souboru (atributy
-// vsechny hardlinky sdili)
+// if the file/directory 'name' has the read-only attribute, we try to clear it
+// (reason: so DeleteFile can succeed for example); if the attributes have already 
+// been read we pass them in 'attr'; when 'attr' is -1 the attributes are read from disk;
+// returns TRUE if the attribute change was attempted (the success is not checked)
+// NOTE: only the read-only attribute is cleared to avoid unnecessary
+// attribute changes on other hard links in case of multiple hardlinks
+// (attributes all the hardlinks share)
 BOOL ClearReadOnlyAttr(const char* name, DWORD attr = -1);
 
-// smaze link na adresar (junction point, symbolic link, mount point); pri uspechu
-// vraci TRUE; pri chybe vraci FALSE a neni-li 'err' NULL, vraci kod chyby v 'err'
+// deletes a directory link (junction point, symbolic link, mount point); returns TRUE on success;
+// on failure returns FALSE and if 'err' is not NULL, the error code is stored there
 BOOL DeleteDirLink(const char* name, DWORD* err);
 
-// vraci TRUE, pokud je cesta 'path' na NOVELLskem svazku (slouzi k detekci toho,
-// jestli lze pouzit fast-directory-move)
+// returns TRUE if 'path' resides on a NOVELL volume (used to detect whether 
+// fast-directory-move can be used)
 BOOL IsNOVELLDrive(const char* path);
 
-// vraci TRUE, pokud je cesta 'path' na LANTASTICskem svazku (slouzi k detekci toho,
-// jestli je nutne po kopirovani kontrolovat velikost souboru); pro optimalizacni
-// ucely se vyuzivaji 'lastLantasticCheckRoot' (pro prvni volani "", pak nemenit)
-// a 'lastIsLantasticPath' (vysledek pro 'lastLantasticCheckRoot')
+// Returns TRUE if 'path' is located on a LANTASTIC volume (used to decide
+// whether the file size must be verified after copying); for performance the
+// parameters 'lastLantasticCheckRoot' ("" for the first call, then unchanged)
+// and 'lastIsLantasticPath' (result for 'lastLantasticCheckRoot') are used
 BOOL IsLantasticDrive(const char* path, char* lastLantasticCheckRoot, BOOL& lastIsLantasticPath);
 
-// vraci TRUE pro sitove cesty
+// returns TRUE for network paths
 BOOL IsNetworkPath(const char* path);
 
-// vraci TRUE pokud 'path' lezi na svazku, ktery podporuje ADS (nebo nastala chyba pri
-// zjistovani o jaky file-system jde) a jsme pod NT/W2K/XP; neni-li 'isFAT32' NULL,
-// vraci v nem TRUE pokud 'path' vede na FAT32 svazek; vraci FALSE jen pokud je
-// jiste, ze FS nepodporuje ADS
+// returns TRUE if 'path' lies on a volume supporting ADS (or an error occurred while
+// detecting the file system) and we are on NT/W2K/XP; if 'isFAT32' is not NULL,
+// it receives TRUE if 'path' points to a FAT32 volume; returns FALSE only when it is
+// certain the FS does not support ADS
 BOOL IsPathOnVolumeSupADS(const char* path, BOOL* isFAT32);
 
 // test jestli jde o Sambu (Linuxova podpora sdileni disku s Windows)
